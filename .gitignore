@@ -1,0 +1,10 @@
+__pycache__
+.vscode
+*.zip
+*.gz
+*.xz
+*.tar
+*.rar
+*.pt
+*.pth
+events.*
