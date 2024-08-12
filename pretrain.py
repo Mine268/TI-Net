@@ -18,6 +18,7 @@ import numpy as np
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
+from torchvision.transforms import InterpolationMode
 import timm.optim.optim_factory as optim_factory
 import einops as eps
 
@@ -64,9 +65,9 @@ def get_args_parser():
     parser.add_argument('--data_path', default='./data/Imagenet-1K', type=str,
                         help='dataset path')
 
-    parser.add_argument('--output_dir', default='./output_dir',
+    parser.add_argument('--output_dir', default='./logs/debug',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='./output_dir',
+    parser.add_argument('--log_dir', default='./logs/debug',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -149,11 +150,11 @@ def train_one_epoch(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
-        if log_writer is not None and (data_iter_step // accum_iter) % 20:
+        if log_writer is not None and (data_iter_step // accum_iter) % 1000 == 0:
             ''' Visulizaing the reconstructing result
             '''
             if args.norm_pix_loss:
-                pred = model.unpatchify(model.patchify(pred))
+                pred = model.module.unpatchify(model.module.patchify(pred))
             recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
             recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
                 torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
@@ -184,7 +185,7 @@ def main(args):
 
     # simple augmentation
     transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
@@ -234,8 +235,8 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+    if True:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
