@@ -129,7 +129,10 @@ def train_one_epoch(model: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
-        loss['backward'] /= accum_iter
+        # TODO: 多指标记录
+        # loss['backward'] /= accum_iter
+        for k in loss.keys():
+            loss[k] /= accum_iter
         loss_scaler(loss['backward'], optimizer, parameters=model.parameters(),
                     update_grad=(data_iter_step + 1) % accum_iter == 0)
         if (data_iter_step + 1) % accum_iter == 0:
@@ -137,24 +140,32 @@ def train_one_epoch(model: torch.nn.Module,
 
         torch.cuda.synchronize()
 
-        metric_logger.update(loss=loss_value)
+        # metric_logger.update(loss=loss_value)
+        for k in loss.keys():
+            metric_logger.update(**{k: loss[k].item()})
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
-        loss_value_reduce = misc.all_reduce_mean(loss_value)
+        # loss_value_reduce = misc.all_reduce_mean(loss_value)
+        reduced_values = {k: misc.all_reduce_mean(v) for k, v in loss.items()}
         if log_writer is not None and data_iter_step % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
             """
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
-            log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
+            # log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
+            for k, v in reduced_values.items():
+                log_writer.add_scalar('train/{}'.format(k), v, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
         if log_writer is not None and (data_iter_step // accum_iter) % 1000 == 0:
             ''' Visulizaing the reconstructing result
             '''
             if args.norm_pix_loss:
-                pred = model.module.unpatchify(model.module.patchify(pred))
+                if args.distributed:
+                    pred = model.module.unpatchify(model.module.patchify(pred))
+                else:
+                    pred = model.unpatchify(model.patchify(pred))
             recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
             recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
                 torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
@@ -235,7 +246,7 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    if True:
+    if args.distributed: 
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
         model_without_ddp = model.module
     
