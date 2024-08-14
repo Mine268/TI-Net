@@ -158,7 +158,7 @@ def train_one_epoch(model: torch.nn.Module,
             for k, v in reduced_values.items():
                 log_writer.add_scalar('train/{}'.format(k), v, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
-        if log_writer is not None and (data_iter_step // accum_iter) % 1000 == 0:
+        if log_writer is not None and (data_iter_step // accum_iter) % 100 == 0:
             ''' Visulizaing the reconstructing result
             '''
             if args.norm_pix_loss:

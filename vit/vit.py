@@ -56,26 +56,6 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
 
         return outcome
 
-def vit_base_patch16(**kwargs):
-    model = VisionTransformer(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def vit_large_patch16(**kwargs):
-    model = VisionTransformer(
-        patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def vit_huge_patch14(**kwargs):
-    model = VisionTransformer(
-        patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
 
 # ref: MaskedAutoencoderViT
 class VitAutoEncoder(nn.Module):
@@ -249,7 +229,8 @@ class SL_VitAutoEncoder(nn.Module):
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
         super().__init__()
-        
+
+        self.img_size = img_size
         self.patch_size = patch_size
         
         # --------------------------------------------------------------------------
@@ -357,7 +338,18 @@ class SL_VitAutoEncoder(nn.Module):
     def latent_operate(self, operator_ix, latent):
         ''' latent [N,L,D]
         '''
+        np = self.img_size // self.patch_size
         operator_emb = self.operator_embeddings[operator_ix]
+
+        latent = einops.rearrange(latent, 'b (p q) d -> b p q d', p=np, q=np)
+        if operator_ix == 0:
+            latent = torch.flip(latent, dims=[2])
+        if operator_ix == 1:
+            latent = torch.flip(latent, dims=[3])
+        if operator_ix == 2:
+            latent = torch.flip(latent, dims=[2,3])
+        latent = einops.rearrange(latent, 'b p q d -> b (p q) d', p=np, q=np)
+
         input_ = latent + operator_emb[None, None, :]
         for blk in self.latent_operator:
             input_ = blk(input_)
@@ -424,6 +416,7 @@ class SL_VitAutoEncoder(nn.Module):
         # --------------------------------------------------------------------------
         # Structural latent loss
         latent = einops.rearrange(latent, "(b t) l d -> t b l d", t=4)  # t: 4 types of operators
+        latent = latent[:,:,1:]
         # 1. Uniary operation
         loss_uni_0 = F.mse_loss(latent[1], self.latent_operate(0, latent[0])) + F.mse_loss(latent[0], self.latent_operate(0, latent[1])) + \
                         F.mse_loss(latent[3], self.latent_operate(0, latent[2])) + F.mse_loss(latent[2], self.latent_operate(0, latent[3]))
@@ -468,77 +461,3 @@ class SL_VitAutoEncoder(nn.Module):
         pred_0 = pred_0[:,0]
 
         return loss, self.unpatchify(pred_0)
-
-
-def ae_vit_base_patch16_dec512d8b(**kwargs):
-    model = VitAutoEncoder(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def ae_vit_base_patch16_dec512d8b(**kwargs):
-    model = VitAutoEncoder(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def ae_vit_large_patch16_dec512d8b(**kwargs):
-    model = VitAutoEncoder(
-        patch_size=16, embed_dim=1024, depth=24, num_heads=16,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def ae_vit_huge_patch14_dec512d8b(**kwargs):
-    model = VitAutoEncoder(
-        patch_size=14, embed_dim=1280, depth=32, num_heads=16,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-# set recommended archs
-ae_vit_base_patch16 = ae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-ae_vit_large_patch16 = ae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-ae_vit_huge_patch14 = ae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
-
-
-def sl_vit_base_patch16_dec512d8b(**kwargs):
-    model = SL_VitAutoEncoder(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def sl_vit_large_patch16_dec512d8b(**kwargs):
-    model = SL_VitAutoEncoder(
-        patch_size=16, embed_dim=1024, depth=24, num_heads=16,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-def sl_vit_huge_patch14_dec512d8b(**kwargs):
-    model = SL_VitAutoEncoder(
-        patch_size=14, embed_dim=1280, depth=32, num_heads=16,
-        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-
-# set recommended archs
-sl_vit_base_patch16 = sl_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-sl_vit_large_patch16 = sl_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-sl_vit_huge_patch14 = sl_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
-
-
-if __name__ == "__main__":
-    net = ae_vit_base_patch16().cuda(0)
-    x = torch.randn(4,3,224,224).cuda(0)
-    loss, pred = net(x)
-    print(loss, pred.shape)
