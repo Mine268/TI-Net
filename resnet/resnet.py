@@ -486,7 +486,7 @@ class SLL_ResNet(nn.Module):
         imgs_batch = einops.rearrange(imgs_batch, '(b t) c h w -> b t c h w', t=4)
         pred = einops.rearrange(pred, '(b t) c h w -> b t c h w', t=4)
         feature_map = einops.rearrange(feature_map, '(b t) c h w -> b t c h w', t=4)
-        latent = torch.mean(einops.rearrange(feature_map, 'b t c h w -> b t c (h w)', t=4), dim=-1)
+        latent = torch.mean(einops.rearrange(feature_map, 'b t c h w -> t b c (h w)', t=4), dim=-1)
 
         loss = self.forward_loss(imgs_batch, pred, latent)
 

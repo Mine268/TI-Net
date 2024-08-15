@@ -634,9 +634,8 @@ class SLL_VitAutoEncoder(nn.Module):
         imgs: [N, 3, H, W]
         pred: [N, L, p*p*3]
         """
-        # TODO: 只对原始图像重建误差 
         # --------------------------------------------------------------------------
-        # Reconstruction loss
+        # 1. Reconstruction loss
         target = self.patchify(imgs)
         if self.norm_pix_loss:
             mean = target.mean(dim=-1, keepdim=True)
@@ -648,10 +647,8 @@ class SLL_VitAutoEncoder(nn.Module):
         # --------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------
-        # Structural latent loss
-        latent = einops.rearrange(latent, "(b t) l d -> t b l d", t=4)  # t: 4 types of operators
-        latent = latent[:,:,1:]
-        # 1. Uniary operation
+        # 1. Structural latent loss
+        # 1) Uniary operation
         loss_uni_0 = F.mse_loss(latent[1], self.latent_operate(0, latent[0])) + F.mse_loss(latent[0], self.latent_operate(0, latent[1])) + \
                         F.mse_loss(latent[3], self.latent_operate(0, latent[2])) + F.mse_loss(latent[2], self.latent_operate(0, latent[3]))
         loss_uni_1 = F.mse_loss(latent[2], self.latent_operate(1, latent[0])) + F.mse_loss(latent[0], self.latent_operate(1, latent[2])) + \
@@ -659,7 +656,7 @@ class SLL_VitAutoEncoder(nn.Module):
         loss_uni_2 = F.mse_loss(latent[0], self.latent_operate(2, latent[3])) + F.mse_loss(latent[3], self.latent_operate(2, latent[0])) + \
                         F.mse_loss(latent[1], self.latent_operate(2, latent[2])) + F.mse_loss(latent[2], self.latent_operate(2, latent[1]))
         loss_uni = loss_uni_0 + loss_uni_1 + loss_uni_2
-        # 2. Binary operation
+        # 2) Binary operation
         loss_bin_hh = F.mse_loss(self.latent_operate(0, self.latent_operate(0, latent[0])), latent[0])
         loss_bin_hv = F.mse_loss(self.latent_operate(1, self.latent_operate(0, latent[0])), latent[3])
         loss_bin_hc = F.mse_loss(self.latent_operate(2, self.latent_operate(0, latent[0])), latent[2])
@@ -670,7 +667,7 @@ class SLL_VitAutoEncoder(nn.Module):
         loss_bin_cv = F.mse_loss(self.latent_operate(1, self.latent_operate(2, latent[0])), latent[1])
         loss_bin_cc = F.mse_loss(self.latent_operate(2, self.latent_operate(2, latent[0])), latent[0])
         loss_bin = loss_bin_hh + loss_bin_hv + loss_bin_hc + loss_bin_vh + loss_bin_vv + loss_bin_vc + loss_bin_ch + loss_bin_cv + loss_bin_cc
-        # 3. Total loss
+        # 3) Total loss
         latent_loss = loss_uni + loss_bin
         # --------------------------------------------------------------------------
 
@@ -689,9 +686,13 @@ class SLL_VitAutoEncoder(nn.Module):
 
         latent = self.forward_encoder(imgs_batch)
         pred = self.forward_decoder(latent)  # [N, L, p*p*3]
+
+        imgs_batch = einops.rearrange(imgs_batch, '(b t) c h w -> b t c h w', t=4)[:,0]
+        pred = einops.rearrange(pred, '(b t) l d -> b t l d', t=4)[:,0]
+        latent = einops.rearrange(latent, '(b t) l d -> t b l d', t=4)[:,:,1:]
         loss = self.forward_loss(imgs_batch, pred, latent)
 
-        pred_0 : torch.Tensor = einops.rearrange(pred, '(b t) l d -> b t l d', t=4).detach()
+        pred_0 = pred.detach()
         pred_0 = pred_0[:,0]
 
         return loss, self.unpatchify(pred_0)
