@@ -634,7 +634,7 @@ class SLL_VitAutoEncoder(nn.Module):
         imgs: [N, 3, H, W]
         pred: [N, L, p*p*3]
         """
-        # TODO: token 顺序调整
+        # TODO: 只对原始图像重建误差 
         # --------------------------------------------------------------------------
         # Reconstruction loss
         target = self.patchify(imgs)

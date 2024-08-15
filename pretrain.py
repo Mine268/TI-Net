@@ -25,6 +25,7 @@ import einops as eps
 import misc
 from misc import NativeScalerWithGradNormCount as NativeScaler
 import vit
+import resnet
 import lr_sched
 
 
@@ -192,6 +193,7 @@ def main(args):
 
     cudnn.benchmark = True
 
+    # TODO: 旋转变换:
     # simple augmentation
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),  # 3 is bicubic
@@ -226,7 +228,14 @@ def main(args):
     )
     
     # define the model
-    model = vit.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model_str = args.model
+    model_class, model_arch = model_str.split('/')
+    if model_class == 'vit':
+        model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
+    elif model_class == 'resnet':
+        model = resnet.__dict__[model_arch]()
+    else:
+        assert False, "model not supported: %s" % model_str
 
     model.to(device)
 
