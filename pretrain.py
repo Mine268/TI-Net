@@ -57,6 +57,8 @@ def get_args_parser():
                         help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
     parser.add_argument('--min_lr', type=float, default=0., metavar='LR',
                         help='lower lr bound for cyclic schedulers that hit 0')
+    parser.add_argument('--clip_grad', type=float, default=None,
+                        help='gradient clipping max norm (default: None, no clipping)')
 
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
@@ -132,7 +134,7 @@ def train_one_epoch(model: torch.nn.Module,
         for k in loss.keys():
             loss[k] /= accum_iter
         # NOTE: clip_grad, avoid nan
-        loss_scaler(loss['backward'], optimizer, clip_grad=5.0, parameters=model.parameters(),
+        loss_scaler(loss['backward'], optimizer, clip_grad=args.clip_grad, parameters=model.parameters(),
                     update_grad=(data_iter_step + 1) % accum_iter == 0)
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.zero_grad()
