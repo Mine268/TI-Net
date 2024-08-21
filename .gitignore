@@ -1,5 +1,7 @@
 __pycache__
 .vscode
+.ipynb_checkpoints
+.preitterrc
 *.zip
 *.gz
 *.xz

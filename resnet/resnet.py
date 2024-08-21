@@ -389,7 +389,6 @@ class SLL_ResNet(nn.Module):
         for i in range(num_layers):
             kernel, padding, output_padding = \
                 self._get_deconv_cfg(num_kernels[i], i)
-
             planes = num_filters[i]
             layers.append(
                 nn.ConvTranspose2d(

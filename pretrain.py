@@ -157,14 +157,14 @@ def train_one_epoch(model: torch.nn.Module,
             for k, v in reduced_values.items():
                 log_writer.add_scalar('train/{}'.format(k), v, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
-        if log_writer is not None and (data_iter_step // accum_iter) % 100 == 0:
+        if log_writer is not None and (data_iter_step // accum_iter) % 1000 == 0:
             ''' Visulizaing the reconstructing result
             '''
-            if args.norm_pix_loss:
-                if args.distributed:
-                    pred = model.module.unpatchify(model.module.patchify(pred))
-                else:
-                    pred = model.unpatchify(model.patchify(pred))
+            # if args.norm_pix_loss:
+            #     if args.distributed:
+            #         pred = model.module.unpatchify(model.module.patchify(pred))
+            #     else:
+            #         pred = model.unpatchify(model.patchify(pred))
             recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
             recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
                 torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
@@ -255,7 +255,7 @@ def main(args):
     print("effective batch size: %d" % eff_batch_size)
 
     if args.distributed: 
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
