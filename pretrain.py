@@ -183,6 +183,9 @@ def main(args):
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
+    # writing trainig config to file
+    with open(os.path.join(args.output_dir, "config.txt"), mode="a", encoding="utf-8") as f:
+        f.write("{}".format(args).replace(', ', ',\n'))
 
     device = torch.device(args.device)
 

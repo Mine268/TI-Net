@@ -212,7 +212,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-
+        
         # get the dimension of latent space 
         self.hidden_dim = self.inplanes
 
@@ -443,7 +443,7 @@ class SLL_ResNet(nn.Module):
 
         # ----------------------------------------------------
         # 2. Structural latent loss
-        # 1) Uniary operation
+        # (1) Uniary operation
         loss_uni_0 = F.mse_loss(latent[1], self.latent_operate(0, latent[0])) + F.mse_loss(latent[0], self.latent_operate(0, latent[1])) + \
                         F.mse_loss(latent[3], self.latent_operate(0, latent[2])) + F.mse_loss(latent[2], self.latent_operate(0, latent[3]))
         loss_uni_1 = F.mse_loss(latent[2], self.latent_operate(1, latent[0])) + F.mse_loss(latent[0], self.latent_operate(1, latent[2])) + \
@@ -451,7 +451,7 @@ class SLL_ResNet(nn.Module):
         loss_uni_2 = F.mse_loss(latent[0], self.latent_operate(2, latent[3])) + F.mse_loss(latent[3], self.latent_operate(2, latent[0])) + \
                         F.mse_loss(latent[1], self.latent_operate(2, latent[2])) + F.mse_loss(latent[2], self.latent_operate(2, latent[1]))
         loss_uni = loss_uni_0 + loss_uni_1 + loss_uni_2
-        # 2) Binary operation
+        # (2) Binary operation
         loss_bin_hh = F.mse_loss(self.latent_operate(0, self.latent_operate(0, latent[0])), latent[0])
         loss_bin_hv = F.mse_loss(self.latent_operate(1, self.latent_operate(0, latent[0])), latent[3])
         loss_bin_hc = F.mse_loss(self.latent_operate(2, self.latent_operate(0, latent[0])), latent[2])
@@ -462,7 +462,7 @@ class SLL_ResNet(nn.Module):
         loss_bin_cv = F.mse_loss(self.latent_operate(1, self.latent_operate(2, latent[0])), latent[1])
         loss_bin_cc = F.mse_loss(self.latent_operate(2, self.latent_operate(2, latent[0])), latent[0])
         loss_bin = loss_bin_hh + loss_bin_hv + loss_bin_hc + loss_bin_vh + loss_bin_vv + loss_bin_vc + loss_bin_ch + loss_bin_cv + loss_bin_cc
-        # 3) Total loss
+        # (3) Total loss
         latent_loss = loss_uni + loss_bin
         # ----------------------------------------------------
 
