@@ -9,7 +9,7 @@
 import numpy as np
 import torch
 import os.path as osp
-from config import cfg
+from ..config import cfg
 from .transforms import transform_joint_to_other_db
 import smplx
 

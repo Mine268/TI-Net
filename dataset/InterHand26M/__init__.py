@@ -1,0 +1,1 @@
+from .InterHand26M import InterHand26M

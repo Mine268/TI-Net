@@ -31,8 +31,8 @@ class PoseResNet(nn.Module):
                                       nn.ReLU(inplace=True),
                                       nn.Linear(1024, 1024),
                                       nn.ReLU(inplace=True),
-                                      nn.Linear(1024, 15*3),
-                                      Rearrange('b (j d) -> b j d', j=15, d=3))
+                                      nn.Linear(1024, 16*3),
+                                      Rearrange('b (j d) -> b j d', j=16, d=3))
         self.pretrained_backbone = backbone_ckpt is not None
         self.backbone.requires_grad_(self.pretrained_backbone)
 
@@ -84,7 +84,7 @@ class PoseResNet(nn.Module):
     def forward(self, imgs):
         feats = self.extract_feature(imgs)
         pose = self.decode_pose(feats)
-        return None, pose
+        return pose
 
 
 if __name__ == "__main__":

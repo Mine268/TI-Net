@@ -9,6 +9,7 @@ import os
 import os.path as osp
 import numpy as np
 import torch
+import torchvision.transforms as transforms
 import cv2
 import json
 import copy
@@ -18,21 +19,33 @@ from glob import glob
 from pycocotools.coco import COCO
 from .config import cfg
 from .utils.mano import mano
-from .utils.preprocessing import load_img, get_bbox, sanitize_bbox, process_bbox, augmentation, transform_db_data, transform_mano_data, get_mano_data, get_iou
+from .utils.preprocessing import load_img, get_bbox, crop_img, sanitize_bbox, process_bbox, augmentation, transform_db_data, transform_mano_data, get_mano_data, get_iou
 from .utils.transforms import world2cam, cam2pixel, transform_joint_to_other_db
 # from .utils.vis import vis_keypoints, save_obj, vis_3d_skeleton
 
 class InterHand26M(torch.utils.data.Dataset):
     def __init__(self, transform, data_split):
-        self.transform = transform
+        self.post_transform = transform
+        self.to_tensor_transform = transforms.ToTensor() 
         self.data_split = data_split
-        self.img_path = osp.join('..', 'data', 'InterHand26M', 'images')
-        self.annot_path = osp.join('..', 'data', 'InterHand26M', 'annotations')
+        self.img_path = osp.join('data', 'InterHand26M', 'images')
+        self.annot_path = osp.join('data', 'InterHand26M', 'annotations')
 
         # IH26M joint set
         self.joint_set = {
                         'joint_num': 42, 
-                        'joints_name': ('R_Thumb_4', 'R_Thumb_3', 'R_Thumb_2', 'R_Thumb_1', 'R_Index_4', 'R_Index_3', 'R_Index_2', 'R_Index_1', 'R_Middle_4', 'R_Middle_3', 'R_Middle_2', 'R_Middle_1', 'R_Ring_4', 'R_Ring_3', 'R_Ring_2', 'R_Ring_1', 'R_Pinky_4', 'R_Pinky_3', 'R_Pinky_2', 'R_Pinky_1', 'R_Wrist', 'L_Thumb_4', 'L_Thumb_3', 'L_Thumb_2', 'L_Thumb_1', 'L_Index_4', 'L_Index_3', 'L_Index_2', 'L_Index_1', 'L_Middle_4', 'L_Middle_3', 'L_Middle_2', 'L_Middle_1', 'L_Ring_4', 'L_Ring_3', 'L_Ring_2', 'L_Ring_1', 'L_Pinky_4', 'L_Pinky_3', 'L_Pinky_2', 'L_Pinky_1', 'L_Wrist'),
+                        'joints_name': ('R_Thumb_4', 'R_Thumb_3', 'R_Thumb_2', 'R_Thumb_1',
+                                        'R_Index_4', 'R_Index_3', 'R_Index_2', 'R_Index_1',
+                                        'R_Middle_4', 'R_Middle_3', 'R_Middle_2', 'R_Middle_1',
+                                        'R_Ring_4', 'R_Ring_3', 'R_Ring_2', 'R_Ring_1',
+                                        'R_Pinky_4', 'R_Pinky_3', 'R_Pinky_2', 'R_Pinky_1',
+                                        'R_Wrist',
+                                        'L_Thumb_4', 'L_Thumb_3', 'L_Thumb_2','L_Thumb_1',
+                                        'L_Index_4', 'L_Index_3', 'L_Index_2', 'L_Index_1',
+                                        'L_Middle_4', 'L_Middle_3', 'L_Middle_2', 'L_Middle_1',
+                                        'L_Ring_4', 'L_Ring_3', 'L_Ring_2', 'L_Ring_1',
+                                        'L_Pinky_4', 'L_Pinky_3', 'L_Pinky_2', 'L_Pinky_1',
+                                        'L_Wrist'),
                         'flip_pairs': [ (i,i+21) for i in range(21)]
                         }
         self.joint_set['joint_type'] = {'right': np.arange(0,self.joint_set['joint_num']//2), 'left': np.arange(self.joint_set['joint_num']//2,self.joint_set['joint_num'])}
@@ -52,7 +65,7 @@ class InterHand26M(torch.utils.data.Dataset):
         if self.data_split == 'train':
             aid_list = list(db.anns.keys())
         else:
-            with open(osp.join('..', 'data', 'InterHand26M', 'aid_human_annot_' + self.data_split + '.txt')) as f:
+            with open(osp.join('dataset', 'InterHand26M', 'aid_human_annot_' + self.data_split + '.txt')) as f:
                 aid_list = f.readlines()
                 aid_list = [int(x) for x in aid_list]
 
@@ -200,7 +213,7 @@ class InterHand26M(torch.utils.data.Dataset):
         # img
         img = load_img(img_path)
         img, img2bb_trans, bb2img_trans, rot, do_flip = augmentation(img, body_bbox, self.data_split)
-        img = self.transform(img.astype(np.float32))/255.
+        img = self.to_tensor_transform(img.astype(np.float32))/255.
 
         # hand bbox transform
         lhand_bbox, lhand_bbox_valid = self.process_hand_bbox(data['lhand_bbox'], do_flip, img_shape, img2bb_trans)
@@ -208,8 +221,15 @@ class InterHand26M(torch.utils.data.Dataset):
         if do_flip:
             lhand_bbox, rhand_bbox = rhand_bbox, lhand_bbox
             lhand_bbox_valid, rhand_bbox_valid = rhand_bbox_valid, lhand_bbox_valid
-        lhand_bbox_center = (lhand_bbox[0] + lhand_bbox[1])/2.; rhand_bbox_center = (rhand_bbox[0] + rhand_bbox[1])/2.; 
-        lhand_bbox_size = lhand_bbox[1] - lhand_bbox[0]; rhand_bbox_size = rhand_bbox[1] - rhand_bbox[0];
+        lhand_bbox_center = (lhand_bbox[0] + lhand_bbox[1])/2.; rhand_bbox_center = (rhand_bbox[0] + rhand_bbox[1])/2.
+        lhand_bbox_size = lhand_bbox[1] - lhand_bbox[0]; rhand_bbox_size = rhand_bbox[1] - rhand_bbox[0]
+
+        height_scale = cfg.input_img_shape[1] / cfg.output_body_hm_shape[2]
+        width_scale = cfg.input_img_shape[0] / cfg.output_body_hm_shape[1]
+        lhand_bbox_center_input = lhand_bbox_center * np.array([height_scale, width_scale])
+        rhand_bbox_center_input = rhand_bbox_center * np.array([height_scale, width_scale])
+        lhand_bbox_size_input = lhand_bbox_size * np.array([height_scale, width_scale])
+        rhand_bbox_size_input = rhand_bbox_size * np.array([height_scale, width_scale])
 
         # ih26m hand gt
         # make all things root-relative and transform data
@@ -297,42 +317,40 @@ class InterHand26M(torch.utils.data.Dataset):
         mano_joint_cam[mano.th_joint_type['left'],:] -= mano_joint_cam[mano.th_root_joint_idx['left'],None,:]
         dummy_trans = np.zeros((3), dtype=np.float32)
         mano_joint_img, mano_joint_cam, mano_mesh_cam, mano_joint_trunc, _, mano_pose = transform_mano_data(mano_joint_img, mano_joint_cam, mano_mesh_cam, mano_joint_valid, dummy_trans, mano_pose, img2bb_trans, rot)
-        
-        """
-        # for debug
-        _tmp = joint_img.copy()
-        _tmp[:,0] = _tmp[:,0] / cfg.output_body_hm_shape[2] * cfg.input_img_shape[1]
-        _tmp[:,1] = _tmp[:,1] / cfg.output_body_hm_shape[1] * cfg.input_img_shape[0]
-        _img = img.numpy().transpose(1,2,0)[:,:,::-1] * 255
-        _img = vis_keypoints(_img.copy(), _tmp)
-        cv2.imwrite('ih26m_' + str(idx) + '_' + data['hand_type'] + '.jpg', _img)
-        # for debug
-        _tmp = mano_joint_img.copy()
-        _tmp[:,0] = _tmp[:,0] / cfg.output_body_hm_shape[2] * cfg.input_img_shape[1]
-        _tmp[:,1] = _tmp[:,1] / cfg.output_body_hm_shape[1] * cfg.input_img_shape[0]
-        _img = img.numpy().transpose(1,2,0)[:,:,::-1] * 255
-        _img = vis_keypoints(_img.copy(), _tmp)
-        cv2.imwrite('ih26m_' + str(idx) + '_' + data['hand_type'] + '_mano.jpg', _img)
-        # for debug
-        _img = img.numpy().transpose(1,2,0)[:,:,::-1] * 255
-        _tmp = lhand_bbox.copy().reshape(2,2)
-        _tmp[:,0] = _tmp[:,0] / cfg.output_body_hm_shape[2] * cfg.input_img_shape[1]
-        _tmp[:,1] = _tmp[:,1] / cfg.output_body_hm_shape[1] * cfg.input_img_shape[0]
-        _img = cv2.rectangle(_img.copy(), (int(_tmp[0,0]), int(_tmp[0,1])), (int(_tmp[1,0]), int(_tmp[1,1])), (255,0,0), 3)
-        cv2.imwrite('ih26m_' + str(idx) + '_' + data['hand_type'] + '_lhand.jpg', _img)
-        # for debug
-        _img = img.numpy().transpose(1,2,0)[:,:,::-1] * 255
-        _tmp = rhand_bbox.copy().reshape(2,2)
-        _tmp[:,0] = _tmp[:,0] / cfg.output_body_hm_shape[2] * cfg.input_img_shape[1]
-        _tmp[:,1] = _tmp[:,1] / cfg.output_body_hm_shape[1] * cfg.input_img_shape[0]
-        _img = cv2.rectangle(_img.copy(), (int(_tmp[0,0]), int(_tmp[0,1])), (int(_tmp[1,0]), int(_tmp[1,1])), (255,0,0), 3)
-        cv2.imwrite('ih26m_' + str(idx) + '_' + data['hand_type'] + '_rhand.jpg', _img)
-        print('saved')
-        """
 
-        inputs = {'img': img}
-        targets = {'joint_img': joint_img, 'mano_joint_img': mano_joint_img, 'joint_cam': joint_cam, 'mano_mesh_cam': mano_mesh_cam, 'rel_trans': rel_trans, 'mano_pose': mano_pose, 'mano_shape': mano_shape, 'lhand_bbox_center': lhand_bbox_center, 'lhand_bbox_size': lhand_bbox_size, 'rhand_bbox_center': rhand_bbox_center, 'rhand_bbox_size': rhand_bbox_size}
-        meta_info = {'bb2img_trans': bb2img_trans, 'joint_valid': joint_valid, 'joint_trunc': joint_trunc, 'mano_joint_trunc': mano_joint_trunc, 'mano_mesh_valid': mano_mesh_valid, 'rel_trans_valid': rel_trans_valid, 'mano_pose_valid': mano_pose_valid, 'mano_shape_valid': mano_shape_valid, 'lhand_bbox_valid': lhand_bbox_valid, 'rhand_bbox_valid': rhand_bbox_valid, 'is_3D': float(True)}
+        # left & right hand img
+        lhand_img = crop_img(img, lhand_bbox_center_input, lhand_bbox_size_input, True)
+        rhand_img = crop_img(img, rhand_bbox_center_input, rhand_bbox_size_input, True)
+
+        inputs = {'img': img,
+                  'lhand_img': self.post_transform(lhand_img),
+                  'rhand_img': self.post_transform(rhand_img)}
+        targets = {'joint_img': joint_img,
+                   'mano_joint_img': mano_joint_img,
+                   'joint_cam': joint_cam,
+                   'mano_mesh_cam': mano_mesh_cam,
+                   'rel_trans': rel_trans,
+                   'mano_pose': mano_pose,
+                   'mano_shape': mano_shape,
+                   'lhand_bbox_center': lhand_bbox_center,
+                   'lhand_bbox_size': lhand_bbox_size,
+                   'rhand_bbox_center': rhand_bbox_center,
+                   'rhand_bbox_size': rhand_bbox_size,
+                   'lhand_bbox_center_input': lhand_bbox_center_input,  # [width, height]
+                   'lhand_bbox_size_input': lhand_bbox_size_input,
+                   'rhand_bbox_center_input': rhand_bbox_center_input,
+                   'rhand_bbox_size_input': rhand_bbox_size_input}
+        meta_info = {'bb2img_trans': bb2img_trans,
+                     'joint_valid': joint_valid,
+                     'joint_trunc': joint_trunc,
+                     'mano_joint_trunc': mano_joint_trunc,
+                     'mano_mesh_valid': mano_mesh_valid,
+                     'rel_trans_valid': rel_trans_valid,
+                     'mano_pose_valid': mano_pose_valid,
+                     'mano_shape_valid': mano_shape_valid,
+                     'lhand_bbox_valid': lhand_bbox_valid,
+                     'rhand_bbox_valid': rhand_bbox_valid,
+                     'is_3D': float(True)}
         return inputs, targets, meta_info
 
     def evaluate(self, outs, cur_sample_idx):
@@ -358,27 +376,6 @@ class InterHand26M(torch.utils.data.Dataset):
             mesh_out = np.concatenate((out['rmano_mesh_cam'], out['lmano_mesh_cam'])) * 1000 # meter to milimeter
             mesh_gt = out['mano_mesh_cam_target'] * 1000 # meter to milimeter
             
-            # visualize
-            # vis = False
-            # if vis:
-            #     filename = str(annot['aid'])
-            #     img = out['img'].transpose(1,2,0)[:,:,::-1]*255
-
-            #     lhand_bbox = out['lhand_bbox'].reshape(2,2).copy()
-            #     lhand_bbox[:,0] = lhand_bbox[:,0] / cfg.input_body_shape[1] * cfg.input_img_shape[1]
-            #     lhand_bbox[:,1] = lhand_bbox[:,1] / cfg.input_body_shape[0] * cfg.input_img_shape[0]
-            #     lhand_bbox = lhand_bbox.reshape(4)
-            #     img = cv2.rectangle(img.copy(), (int(lhand_bbox[0]), int(lhand_bbox[1])), (int(lhand_bbox[2]), int(lhand_bbox[3])), (255,0,0), 3)
-            #     rhand_bbox = out['rhand_bbox'].reshape(2,2).copy()
-            #     rhand_bbox[:,0] = rhand_bbox[:,0] / cfg.input_body_shape[1] * cfg.input_img_shape[1]
-            #     rhand_bbox[:,1] = rhand_bbox[:,1] / cfg.input_body_shape[0] * cfg.input_img_shape[0]
-            #     rhand_bbox = rhand_bbox.reshape(4)
-            #     img = cv2.rectangle(img.copy(), (int(rhand_bbox[0]), int(rhand_bbox[1])), (int(rhand_bbox[2]), int(rhand_bbox[3])), (0,0,255), 3)
-            #     cv2.imwrite(filename + '.jpg', img)
-
-            #     save_obj(out['rmano_mesh_cam'], mano.face['right'], filename + '_right.obj')
-            #     save_obj(out['lmano_mesh_cam'] + out['rel_trans'].reshape(1,3), mano.face['left'], filename + '_left.obj')
-
             # mrrpe
             rel_trans_gt = joint_gt[self.joint_set['root_joint_idx']['left']] - joint_gt[self.joint_set['root_joint_idx']['right']]
             rel_trans_out = out['rel_trans'] * 1000 # meter to milimeter

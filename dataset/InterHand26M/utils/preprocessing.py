@@ -9,7 +9,7 @@
 import numpy as np
 import cv2
 import random
-from config import cfg
+from ..config import cfg
 import math
 from .mano import mano
 from .transforms import cam2pixel, transform_joint_to_other_db
@@ -29,14 +29,14 @@ def load_img(path, order='RGB'):
 
 def get_bbox(joint_img, joint_valid, extend_ratio=1.2):
     x_img, y_img = joint_img[:,0], joint_img[:,1]
-    x_img = x_img[joint_valid==1]; y_img = y_img[joint_valid==1];
-    xmin = min(x_img); ymin = min(y_img); xmax = max(x_img); ymax = max(y_img);
+    x_img = x_img[joint_valid==1]; y_img = y_img[joint_valid==1]
+    xmin = min(x_img); ymin = min(y_img); xmax = max(x_img); ymax = max(y_img)
 
-    x_center = (xmin+xmax)/2.; width = xmax-xmin;
+    x_center = (xmin+xmax)/2.; width = xmax-xmin
     xmin = x_center - 0.5 * width * extend_ratio
     xmax = x_center + 0.5 * width * extend_ratio
     
-    y_center = (ymin+ymax)/2.; height = ymax-ymin;
+    y_center = (ymin+ymax)/2.; height = ymax-ymin
     ymin = y_center - 0.5 * height * extend_ratio
     ymax = y_center + 0.5 * height * extend_ratio
 
@@ -55,6 +55,24 @@ def sanitize_bbox(bbox, img_width, img_height):
         bbox = None
 
     return bbox
+
+def crop_img(img, center, size, squarify=True):
+    center_w, center_h = center
+    width, height = size
+
+    if squarify:
+        length = max(width, height)
+        width = height = length
+
+    min_h = int(center_h - height / 2)
+    max_h = int(center_h + height / 2)
+    min_w = int(center_w - width / 2)
+    max_w = int(center_w + width / 2)
+
+    if isinstance(img, torch.Tensor):
+        return img[:,min_h:max_h, min_w:max_w]
+    else:
+        return img[min_h:max_h, min_w:max_w]
 
 def process_bbox(bbox, img_width, img_height, do_sanitize=True, extend_ratio=1.25):
     if do_sanitize:

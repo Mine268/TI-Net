@@ -11,6 +11,8 @@ import json
 import math
 from pathlib import Path
 
+import random
+import einops
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
@@ -27,6 +29,9 @@ from misc import NativeScalerWithGradNormCount as NativeScaler
 import vit
 import resnet
 import lr_sched
+from loss import PoseLoss
+
+from dataset.InterHand26M import InterHand26M
 
 
 def get_args_parser():
@@ -38,15 +43,16 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='vit/ae_vit_base_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train')
+    parser.add_argument('--model', default='resnet/pose_resnet50', type=str, metavar='MODEL',
+                        help='Name of model to finetune')
+    parser.add_argument('--backbone_ckpt', default=None, type=str, help='Path to pre-trained backbone checkpoint')
 
     parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
 
-    parser.add_argument('--norm_pix_loss', action='store_true',
-                        help='Use (per-patch) normalized pixels as targets for computing loss')
-    parser.set_defaults(norm_pix_loss=False)
+    # parser.add_argument('--norm_pix_loss', action='store_true',
+    #                     help='Use (per-patch) normalized pixels as targets for computing loss')
+    # parser.set_defaults(norm_pix_loss=False)
 
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
@@ -65,7 +71,7 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='./data/Imagenet-1K', type=str,
+    parser.add_argument('--data_path', default='./data/InterHand26M', type=str,  # data path to InterHand26M
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./logs/debug',
@@ -95,7 +101,7 @@ def get_args_parser():
                         help='url used to set up distributed training')
 
     return parser
-    
+
 
 def train_one_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -110,22 +116,44 @@ def train_one_epoch(model: torch.nn.Module,
 
     accum_iter = args.accum_iter
 
+    pose_loss = PoseLoss()
     optimizer.zero_grad()
 
-    if log_writer is not None:
-        print('log_dir: {}'.format(log_writer.log_dir))
-
-    for data_iter_step, (samples, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-
+    for data_iter_step, (inputs_, targets_, meta_info_) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        samples = samples.to(device, non_blocking=True)
+        # inputs to cuda
+        for key, value in inputs_.items():
+            inputs_[key] = value.to(device, non_blocking=True)
+        # targets to cuda
+        for key, value in targets_.items():
+            targets_[key] = value.to(device, non_blocking=True)
+        # meta info to cuda
+        for key, value in meta_info_.items():
+            meta_info_[key] = value.to(device, non_blocking=True)
+
+        # * construct the input tensor
+        rhand_img = inputs_['rhand_img']
+        lhand_img = torch.flip(inputs_['lhand_img'], dims=3)  # flip the left to right
+        samples = torch.concatenate((rhand_img, lhand_img), dim=0)
 
         with torch.cuda.amp.autocast():
-            loss, pred = model(samples)
+            pred = model(samples)
 
+        # * restore the flip operation
+        mano_pose = einops.rearrange(pred, '(h b) j d -> h b j d', h=2, j=16, d=3)
+        rmano_pose = mano_pose[0]
+        lmano_pose = mano_pose[1]
+        lmano_pose = torch.cat([lmano_pose[:,:,0:1], -mano_pose[:,:,1:3]], dim=2)
+        mano_pose = einops.rearrange(torch.cat([rmano_pose, lmano_pose], dim=1), '(h b) j d -> (h b) (j d)', h=2, j=16, d=3)
+
+        # * calculate the loss
+        loss_mano = pose_loss(mano_pose, targets_['mano_pose'], meta_info_['mano_pose_valid'])
+        loss = {'backward': loss_mano, 'loss_mano': loss_mano}
+
+        # TODO: calculate the `loss`.
         loss_value = loss['backward'].item()
 
         if not math.isfinite(loss_value):
@@ -189,24 +217,24 @@ def main(args):
 
     device = torch.device(args.device)
 
-    # fix the seed for reproducibility
+    # seed fixed
     seed = args.seed + misc.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
+    random.seed(seed)
 
     cudnn.benchmark = True
 
-    # simple augmentation
-    transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),  # 3 is bicubic
-            # transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation((0, 360)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # * Resize image to 224*224
+    # * Images have be preprocessed by dataset class into torch.Tensor, 
+    # * only things to be done is resizing.
+    transforms_train = transforms.Compose([
+        transforms.Resize((224, 224))
+    ])
+    dataset_train = InterHand26M(transforms_train, "train") 
     print(dataset_train)
-    
-    if True:  # args.distributed:
+
+    if True:  # ? args.distributed:
         num_tasks = misc.get_world_size()
         global_rank = misc.get_rank()
         sampler_train = torch.utils.data.DistributedSampler(
@@ -214,14 +242,14 @@ def main(args):
         )
         print("Sampler_train = %s" % str(sampler_train))
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        sample_train = torch.utils.data.RandomSampler(dataset_train)
 
     if global_rank == 0 and args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
         log_writer = SummaryWriter(log_dir=args.log_dir)
     else:
         log_writer = None
-
+    
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
@@ -229,14 +257,15 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
-    
+
+    # * Define the model
     # define the model
     model_str = args.model
     model_class, model_arch = model_str.split('/')
     if model_class == 'vit':
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
     elif model_class == 'resnet':
-        model = resnet.__dict__[model_arch]()
+        model = resnet.__dict__[model_arch](backbone_ckpt=args.backbone_ckpt)
     else:
         assert False, "model not supported: %s" % model_str
 

@@ -1,5 +1,47 @@
 from .resnet import ResNet, resnet_spec
 from .resnet import SLL_ResNet
+from .posenet import PoseResNet
+
+
+def pose_resnet18(backbone_ckpt=None):
+    block_class, layers = resnet_spec[18]
+    model = PoseResNet(block=block_class,
+                       layers=layers,
+                       num_input_channels=3,
+                       backbone_ckpt=backbone_ckpt)
+    return model
+
+def pose_resnet34(backbone_ckpt=None):
+    block_class, layers = resnet_spec[34]
+    model = PoseResNet(block=block_class,
+                       layers=layers,
+                       num_input_channels=3,
+                       backbone_ckpt=backbone_ckpt)
+    return model
+
+def pose_resnet50(backbone_ckpt=None):
+    block_class, layers = resnet_spec[50]
+    model = PoseResNet(block=block_class,
+                       layers=layers,
+                       num_input_channels=3,
+                       backbone_ckpt=backbone_ckpt)
+    return model
+
+def pose_resnet101(backbone_ckpt=None):
+    block_class, layers = resnet_spec[101]
+    model = PoseResNet(block=block_class,
+                       layers=layers,
+                       num_input_channels=3,
+                       backbone_ckpt=backbone_ckpt)
+    return model
+
+def pose_resnet152(backbone_ckpt=None):
+    block_class, layers = resnet_spec[152]
+    model = PoseResNet(block=block_class,
+                       layers=layers,
+                       num_input_channels=3,
+                       backbone_ckpt=backbone_ckpt)
+    return model
 
 
 def sll_resnet18():

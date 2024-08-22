@@ -12,3 +12,4 @@ __pycache__
 events.*
 data/*
 tmp.py
+*.pkl
