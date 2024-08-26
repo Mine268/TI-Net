@@ -117,7 +117,5 @@ class PoseLoss(nn.Module):
         pose_gt = axis_angle_to_matrix(pose_gt)
 
         loss = torch.abs(pose_out - pose_gt) * pose_valid[:,:,None,None]
+        loss = torch.mean(torch.sum(loss, dim=(1,2,3)))
         return loss
-
-
-       

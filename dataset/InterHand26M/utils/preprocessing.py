@@ -4,8 +4,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 # 
-
-
 import numpy as np
 import cv2
 import random
@@ -15,6 +13,8 @@ from .mano import mano
 from .transforms import cam2pixel, transform_joint_to_other_db
 from plyfile import PlyData, PlyElement
 import torch
+import kornia
+
 
 def load_img(path, order='RGB'):
     img = cv2.imread(path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
@@ -56,23 +56,35 @@ def sanitize_bbox(bbox, img_width, img_height):
 
     return bbox
 
-def crop_img(img, center, size, squarify=True):
-    center_w, center_h = center
-    width, height = size
+def crop_img(img: torch.Tensor, bbox_center, bbox_size, squarify=True, avoid_zero=False):
+    '''
+    center, size 均遵从 interwild 工作中的定义，是一个二元组。第一、二个元素分别
+    是水平方向和垂直方向的位置和长度。
+    '''
+    assert isinstance(img, torch.Tensor), "Only torch.Tensor image is supported"
+    
+    w_center, h_center = bbox_center
+    width, height = bbox_size
 
     if squarify:
         length = max(width, height)
-        width = height = length
+        width = length
+        height = length
+    if avoid_zero:
+        width = max(width, 2)  # ! use 2 instead of 1
+        height = max(height, 2)
+    
+    w_min = (w_center - width / 2)
+    h_min = (h_center - height / 2)
+    w_max = (w_center + width / 2)
+    h_max = (h_center + height / 2)
+    boxes = torch.tensor([[
+        [w_min, h_min], [w_max, h_min], [w_max, h_max], [w_min, h_max]
+    ]])
+    output_size = (int(height), int(width))
 
-    min_h = int(center_h - height / 2)
-    max_h = int(center_h + height / 2)
-    min_w = int(center_w - width / 2)
-    max_w = int(center_w + width / 2)
-
-    if isinstance(img, torch.Tensor):
-        return img[:,min_h:max_h, min_w:max_w]
-    else:
-        return img[min_h:max_h, min_w:max_w]
+    cropped_img = kornia.geometry.transform.crop_and_resize(img[None,...], boxes, output_size)
+    return cropped_img[0]
 
 def process_bbox(bbox, img_width, img_height, do_sanitize=True, extend_ratio=1.25):
     if do_sanitize:

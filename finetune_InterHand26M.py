@@ -71,8 +71,8 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='./data/InterHand26M', type=str,  # data path to InterHand26M
-                        help='dataset path')
+    # parser.add_argument('--data_path', default='./data/InterHand26M', type=str,  # data path to InterHand26M
+    #                     help='dataset path')
 
     parser.add_argument('--output_dir', default='./logs/debug',
                         help='path where to save, empty for no saving')
@@ -120,6 +120,7 @@ def train_one_epoch(model: torch.nn.Module,
     optimizer.zero_grad()
 
     for data_iter_step, (inputs_, targets_, meta_info_) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    # for data_iter_step, (inputs_, targets_, meta_info_) in enumerate(data_loader):
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
@@ -136,7 +137,7 @@ def train_one_epoch(model: torch.nn.Module,
 
         # * construct the input tensor
         rhand_img = inputs_['rhand_img']
-        lhand_img = torch.flip(inputs_['lhand_img'], dims=3)  # flip the left to right
+        lhand_img = torch.flip(inputs_['lhand_img'], dims=[3])  # flip the left to right
         samples = torch.concatenate((rhand_img, lhand_img), dim=0)
 
         with torch.cuda.amp.autocast():
@@ -146,8 +147,8 @@ def train_one_epoch(model: torch.nn.Module,
         mano_pose = einops.rearrange(pred, '(h b) j d -> h b j d', h=2, j=16, d=3)
         rmano_pose = mano_pose[0]
         lmano_pose = mano_pose[1]
-        lmano_pose = torch.cat([lmano_pose[:,:,0:1], -mano_pose[:,:,1:3]], dim=2)
-        mano_pose = einops.rearrange(torch.cat([rmano_pose, lmano_pose], dim=1), '(h b) j d -> (h b) (j d)', h=2, j=16, d=3)
+        lmano_pose = torch.cat([lmano_pose[:,:,0:1], -lmano_pose[:,:,1:3]], dim=2)
+        mano_pose = einops.rearrange(torch.cat([rmano_pose, lmano_pose], dim=1), 'b (h j) d -> b (h j d)', h=2, j=16, d=3)
 
         # * calculate the loss
         loss_mano = pose_loss(mano_pose, targets_['mano_pose'], meta_info_['mano_pose_valid'])
@@ -188,16 +189,12 @@ def train_one_epoch(model: torch.nn.Module,
         if log_writer is not None and (data_iter_step // accum_iter) % 1000 == 0:
             ''' Visulizaing the reconstructing result
             '''
-            # if args.norm_pix_loss:
-            #     if args.distributed:
-            #         pred = model.module.unpatchify(model.module.patchify(pred))
-            #     else:
-            #         pred = model.unpatchify(model.patchify(pred))
-            recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
-            recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
-                torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
-            recon_vis = make_grid(recon_vis, 4, padding=2)
-            log_writer.add_image('recon', recon_vis, epoch_1000x)
+            # recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
+            # recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
+            #     torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
+            # recon_vis = make_grid(recon_vis, 4, padding=2)
+            # log_writer.add_image('recon', recon_vis, epoch_1000x)
+            pass
 
 
     # gather the stats from all processes
@@ -212,7 +209,7 @@ def main(args):
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
     # writing trainig config to file
-    with open(os.path.join(args.output_dir, "config.txt"), mode="a", encoding="utf-8") as f:
+    with open(os.path.join(args.output_dir, "config.txt"), mode="w", encoding="utf-8") as f:
         f.write("{}".format(args).replace(', ', ',\n'))
 
     device = torch.device(args.device)
@@ -231,7 +228,8 @@ def main(args):
     transforms_train = transforms.Compose([
         transforms.Resize((224, 224))
     ])
-    dataset_train = InterHand26M(transforms_train, "train") 
+    # TODO: test for debug
+    dataset_train = InterHand26M(transforms_train, "test") 
     print(dataset_train)
 
     if True:  # ? args.distributed:

@@ -319,10 +319,12 @@ class InterHand26M(torch.utils.data.Dataset):
         mano_joint_img, mano_joint_cam, mano_mesh_cam, mano_joint_trunc, _, mano_pose = transform_mano_data(mano_joint_img, mano_joint_cam, mano_mesh_cam, mano_joint_valid, dummy_trans, mano_pose, img2bb_trans, rot)
 
         # left & right hand img
-        lhand_img = crop_img(img, lhand_bbox_center_input, lhand_bbox_size_input, True)
-        rhand_img = crop_img(img, rhand_bbox_center_input, rhand_bbox_size_input, True)
+        lhand_img = crop_img(img, lhand_bbox_center_input, lhand_bbox_size_input, squarify=True, avoid_zero=True)
+        rhand_img = crop_img(img, rhand_bbox_center_input, rhand_bbox_size_input, squarify=True, avoid_zero=True)
+        # print(lhand_img.shape, rhand_img.shape)
 
         inputs = {'img': img,
+                  # TODO: hand_img cannot be 0*0 size
                   'lhand_img': self.post_transform(lhand_img),
                   'rhand_img': self.post_transform(rhand_img)}
         targets = {'joint_img': joint_img,
