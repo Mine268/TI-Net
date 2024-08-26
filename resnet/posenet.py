@@ -31,13 +31,17 @@ class PoseResNet(nn.Module):
                                       nn.ReLU(inplace=True),
                                       nn.Linear(1024, 1024),
                                       nn.ReLU(inplace=True),
+                                      nn.Linear(1024, 1024),
+                                      nn.ReLU(inplace=True),
+                                      nn.Linear(1024, 1024),
+                                      nn.ReLU(inplace=True),
                                       nn.Linear(1024, 16*3),
                                       Rearrange('b (j d) -> b j d', j=16, d=3))
         self.pretrained_backbone = backbone_ckpt is not None
         self.backbone.requires_grad_(self.pretrained_backbone)
 
         if isinstance(backbone_ckpt, str):
-            backbone_ckpt = torch.load(backbone_ckpt)
+            backbone_ckpt = torch.load(backbone_ckpt, weights_only=True)
             backbone_ckpt = {k.replace('module.', ''): v for k, v in backbone_ckpt['model'].items()}
             backbone_ckpt = {k: v for k, v in backbone_ckpt.items() if 'deconv_layers' not in k}
         elif isinstance(backbone_ckpt, dict):

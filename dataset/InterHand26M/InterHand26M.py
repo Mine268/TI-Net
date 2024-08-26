@@ -26,7 +26,9 @@ from .utils.transforms import world2cam, cam2pixel, transform_joint_to_other_db
 class InterHand26M(torch.utils.data.Dataset):
     def __init__(self, transform, data_split):
         self.post_transform = transform
-        self.to_tensor_transform = transforms.ToTensor() 
+        self.to_tensor_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         self.data_split = data_split
         self.img_path = osp.join('data', 'InterHand26M', 'images')
         self.annot_path = osp.join('data', 'InterHand26M', 'annotations')

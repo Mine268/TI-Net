@@ -1,3 +1,6 @@
+nvidia-smi
+
+
 main_pretrain.py
 
 ```bash
@@ -51,4 +54,20 @@ CUDA_VISIBLE_DEVICES=4,5,6,7 /home/renkaiwen/.conda/envs/py310_torch113/bin/pyth
 	--pin_mem \
 	--output_dir logs/20240816-1 \
 	--log_dir logs/20240816-1
+```
+
+
+finetune interhand26M
+```
+CUDA_VISIBLE_DEVICES=4,5,6,7 torchrun --nproc_per_node=4 finetune_InterHand26M.py \
+	--batch_size 96 \
+	--epochs 30 \
+	--model resnet/pose_resnet50 \
+	--backbone_ckpt ./logs/20240816-1/checkpoint-53.pth \
+	--blr 1.5e-4 \
+	--warmup_epochs 0 \
+	--clip_grad 5.0 \
+	--pin_mem \
+	--output_dir logs/20240826-1 \
+	--log_dir logs/20240826-1
 ```
