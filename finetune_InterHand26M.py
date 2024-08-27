@@ -229,7 +229,7 @@ def main(args):
         transforms.Resize((224, 224))
     ])
     # TODO: test for debug
-    dataset_train = InterHand26M(transforms_train, "test") 
+    dataset_train = InterHand26M(transforms_train, "train") 
     print(dataset_train)
 
     if True:  # ? args.distributed:

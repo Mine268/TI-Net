@@ -41,7 +41,7 @@ class PoseResNet(nn.Module):
         self.backbone.requires_grad_(self.pretrained_backbone)
 
         if isinstance(backbone_ckpt, str):
-            backbone_ckpt = torch.load(backbone_ckpt, weights_only=True)
+            backbone_ckpt = torch.load(backbone_ckpt, weights_only=False)
             backbone_ckpt = {k.replace('module.', ''): v for k, v in backbone_ckpt['model'].items()}
             backbone_ckpt = {k: v for k, v in backbone_ckpt.items() if 'deconv_layers' not in k}
         elif isinstance(backbone_ckpt, dict):
