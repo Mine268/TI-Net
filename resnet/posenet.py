@@ -1,6 +1,7 @@
 import einops
 from einops.layers.torch import *
 import torch
+import torch.nn as nn
 
 if __name__ == '__main__':
     from resnet import *
@@ -53,6 +54,7 @@ class PoseResNet(nn.Module):
             missing, unexpected = self.backbone.load_state_dict(backbone_ckpt, strict=False)
             print('missing key(s): ', missing)
             print('unexpected key(s): ', unexpected)
+            print(f'Model loaded from {backbone_ckpt}')
             self.backbone.eval()
         else:
             self.backbone.train()

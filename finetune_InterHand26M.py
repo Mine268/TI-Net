@@ -14,6 +14,7 @@ from pathlib import Path
 import random
 import einops
 import torch
+from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
@@ -31,6 +32,7 @@ import resnet
 import lr_sched
 from loss import PoseLoss
 
+from dataset import DataLoaderX
 from dataset.InterHand26M import InterHand26M
 
 
@@ -228,7 +230,6 @@ def main(args):
     transforms_train = transforms.Compose([
         transforms.Resize((224, 224))
     ])
-    # TODO: test for debug
     dataset_train = InterHand26M(transforms_train, "train") 
     print(dataset_train)
 
@@ -248,7 +249,7 @@ def main(args):
     else:
         log_writer = None
     
-    data_loader_train = torch.utils.data.DataLoader(
+    data_loader_train = DataLoaderX(  # torch.utils.data.DataLoader
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
