@@ -70,15 +70,15 @@ class Config:
 
 cfg = Config()
 
-sys.path.insert(0, osp.join(cfg.root_dir, 'common'))
-from .utils.dir import add_pypath, make_folder
-add_pypath(osp.join(cfg.data_dir))
-for i in range(len(cfg.trainset_3d)):
-    add_pypath(osp.join(cfg.data_dir, cfg.trainset_3d[i]))
-for i in range(len(cfg.trainset_2d)):
-    add_pypath(osp.join(cfg.data_dir, cfg.trainset_2d[i]))
-add_pypath(osp.join(cfg.data_dir, cfg.testset))
-make_folder(cfg.model_dir)
-make_folder(cfg.vis_dir)
-make_folder(cfg.log_dir)
-make_folder(cfg.result_dir)
+# sys.path.insert(0, osp.join(cfg.root_dir, 'common'))
+# from .utils.dir import add_pypath, make_folder
+# add_pypath(osp.join(cfg.data_dir))
+# for i in range(len(cfg.trainset_3d)):
+#     add_pypath(osp.join(cfg.data_dir, cfg.trainset_3d[i]))
+# for i in range(len(cfg.trainset_2d)):
+#     add_pypath(osp.join(cfg.data_dir, cfg.trainset_2d[i]))
+# add_pypath(osp.join(cfg.data_dir, cfg.testset))
+# make_folder(cfg.model_dir)
+# make_folder(cfg.vis_dir)
+# make_folder(cfg.log_dir)
+# make_folder(cfg.result_dir)
