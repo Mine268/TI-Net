@@ -65,7 +65,7 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='./data/Imagenet-1K', type=str,
+    parser.add_argument('--data_path', default='./data/Imagenet-21K-P', type=str,
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./logs/debug',

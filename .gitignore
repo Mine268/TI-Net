@@ -13,3 +13,4 @@ events.*
 data/*
 tmp.py
 *.pkl
+.nfs*

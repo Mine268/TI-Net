@@ -10,6 +10,7 @@ import datetime
 import json
 import math
 from pathlib import Path
+from tqdm import tqdm
 
 import random
 import einops
@@ -34,6 +35,7 @@ from loss import PoseLoss
 
 from dataset import DataLoaderX
 from dataset.InterHand26M import InterHand26M
+from dataset.InterHand26M.utils.mano import mano
 
 
 def get_args_parser():
@@ -82,7 +84,7 @@ def get_args_parser():
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
-    parser.add_argument('--seed', default=0, type=int)
+    parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
 
@@ -198,7 +200,6 @@ def train_one_epoch(model: torch.nn.Module,
             # log_writer.add_image('recon', recon_vis, epoch_1000x)
             pass
 
-
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -249,7 +250,7 @@ def main(args):
     else:
         log_writer = None
     
-    data_loader_train = DataLoaderX(  # torch.utils.data.DataLoader
+    data_loader_train = DataLoader(  # torch.utils.data.DataLoader
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
@@ -299,6 +300,7 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
+        # configure ddp training
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
@@ -312,9 +314,9 @@ def main(args):
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
 
+        # log epoch status
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
-
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
                 log_writer.flush()

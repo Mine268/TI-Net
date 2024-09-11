@@ -23,10 +23,10 @@ class PoseResNet(nn.Module):
         backbone_ckpt: dictionary checkpoint or path to pretrained checkpoints.
         '''
         super(PoseResNet, self).__init__()
-        self.backbone = ResNet(block, layers, num_input_channels,
-                               deconv_with_bias, num_deconv_layers,
-                               num_deconv_filters, num_deconv_kernels,
-                               final_conv_kernel)
+        self.backbone: nn.Module = ResNet(block, layers, num_input_channels,
+                                          deconv_with_bias, num_deconv_layers,
+                                          num_deconv_filters, num_deconv_kernels,
+                                          final_conv_kernel)
         self.hidden_dim = self.backbone.hidden_dim
         self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                       nn.ReLU(inplace=True),
@@ -54,7 +54,7 @@ class PoseResNet(nn.Module):
             missing, unexpected = self.backbone.load_state_dict(backbone_ckpt, strict=False)
             print('missing key(s): ', missing)
             print('unexpected key(s): ', unexpected)
-            print(f'Model loaded from {backbone_ckpt}')
+            print(f'Model loaded.')
             self.backbone.eval()
         else:
             self.backbone.train()
@@ -62,8 +62,7 @@ class PoseResNet(nn.Module):
     def train(self, mode: bool = True):
         if not self.pretrained_backbone:
             self.backbone.train(mode)
-
-        self.pose_mlp.train()
+        self.pose_mlp.train(mode)
         return self
 
     def eval(self):
