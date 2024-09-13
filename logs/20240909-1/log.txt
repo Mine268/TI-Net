@@ -1,0 +1,1 @@
+{"train_lr": 3.046846349954863e-05, "train_backward": 1.0763530977748217, "train_reconstruction": 1.0755565516721015, "train_latent": 0.796546080354848, "epoch": 0}

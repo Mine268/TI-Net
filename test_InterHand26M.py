@@ -1,11 +1,12 @@
 import copy
-import time
+from datetime import datetime
 import os
 import argparse
 
 import einops as eps
 import torch
 import torch.utils
+import torch.nn as nn
 import torchvision.transforms as transforms
 import numpy as np
 import einops as eps
@@ -30,7 +31,7 @@ def parse_arg():
     args = parser.parse_args()
     return args
 
-
+joint_regressor = None
 def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -> list:
     mano_pose_pred = eps.rearrange(pred, '(h b) j d -> h b j d', h=2)
     rmano_pose_pred = mano_pose_pred[0]
@@ -53,21 +54,24 @@ def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -
     r_output = mano_layer['right'](betas=rmano_shape,
                                    hand_pose=rmano_pose[:,3:],
                                    global_orient=rmano_pose[:,:3],
-                                   transl=torch.zeros(batch_size*2, 3))
+                                   transl=torch.zeros(batch_size*2, 3, device=rmano_shape.device))
     l_output = mano_layer['left'](betas=lmano_shape,
-                                   hand_pose=lmano_pose[:,3:],
-                                   global_orient=lmano_pose[:,:3],
-                                   transl=torch.zeros(batch_size*2, 3))
+                                  hand_pose=lmano_pose[:,3:],
+                                  global_orient=lmano_pose[:,:3],
+                                  transl=torch.zeros(batch_size*2, 3, device=lmano_shape.device))
 
     rmesh_pred = r_output.vertices[:batch_size]
     rmesh_gt = r_output.vertices[batch_size:]
     lmesh_pred = l_output.vertices[:batch_size]
     lmesh_gt = l_output.vertices[batch_size:]
 
-    rjoint_pred = torch.bmm(torch.from_numpy(mano.sh_joint_regressor)[None,...].repeat(batch_size,1,1), rmesh_pred)
-    rjoint_gt = torch.bmm(torch.from_numpy(mano.sh_joint_regressor)[None,...].repeat(batch_size,1,1), rmesh_gt)
-    ljoint_pred = torch.bmm(torch.from_numpy(mano.sh_joint_regressor)[None,...].repeat(batch_size,1,1), lmesh_pred)
-    ljoint_gt = torch.bmm(torch.from_numpy(mano.sh_joint_regressor)[None,...].repeat(batch_size,1,1), lmesh_gt)
+    global joint_regressor
+    if joint_regressor is None:
+        joint_regressor = torch.from_numpy(mano.sh_joint_regressor)[None,...].repeat(batch_size,1,1).to(rmano_shape.device)
+    rjoint_pred = torch.bmm(joint_regressor, rmesh_pred)
+    rjoint_gt = torch.bmm(joint_regressor, rmesh_gt)
+    ljoint_pred = torch.bmm(joint_regressor, lmesh_pred)
+    ljoint_gt = torch.bmm(joint_regressor, lmesh_gt)
 
     mesh_pred = torch.cat([rmesh_pred, lmesh_pred], dim=1)
     mesh_gt = torch.cat([rmesh_gt, lmesh_gt], dim=1)
@@ -83,20 +87,24 @@ def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -
 
 
 def test(args):
-    mano_layer = copy.deepcopy(mano.layer).to(f"cuda:{args.device}")
+    mano_layer = copy.deepcopy(mano.layer)  # .to(f"cuda:{args.device}")
+    mano_layer['left'].to(f"cuda:{args.device}")
+    mano_layer['right'].to(f"cuda:{args.device}")
 
     transforms_test = transforms.Compose([
         transforms.Resize((224, 224))
     ])
     dataset_train = InterHand26M(transforms_test, "test")
-    dataloader = torch.utils.data.DataLoader(dataset_train, batch_size=32, pin_memory=True)
+    dataloader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, pin_memory=True)
 
     model_str = args.model
     model_class, model_arch = model_str.split('/')
     if model_class == 'vit':
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
     elif model_class == 'resnet':
-        model = resnet.__dict__[model_arch](backbone_ckpt=args.backbone_ckpt)
+        model: nn.Module = resnet.__dict__[model_arch]()
+        ckpt = torch.load(args.backbone_ckpt, map_location="cpu", weights_only=False)
+        model.load_state_dict(ckpt['model'])
     else:
         assert False, "model not supported: %s" % model_str
     model.to(f"cuda:{args.device}")
@@ -120,7 +128,7 @@ def test(args):
 
         with torch.no_grad():
             pred = model(samples)
-            mesh_error, mesh_valid, joint_error, joint_valid = eval_batch(mano_layer, pred.detach(), targets_, meta_info_)
+            mesh_error, mesh_valid, joint_error, joint_valid = eval_batch(mano_layer, pred, targets_, meta_info_)
 
         mpjpe_list.extend(joint_error[joint_valid > 0.5].tolist())
         cur_mpvpe = mesh_error[mesh_valid > 0.5]
@@ -133,7 +141,8 @@ def test(args):
     print(f"MPJPE: {mpjpe} m")
     print(f"MPVPE: {mpvpe} m")
 
-    with open(os.path.join(args.output_dir, f"eval_InterHand26M_{time.ctime()}"), "w") as f:
+    time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    with open(os.path.join(args.output_dir, f"eval_InterHand26M_{time_str}.txt"), "w") as f:
         f.write(f"MPJPE: {mpjpe} m\nfMPVPE: {mpvpe} m")
 
 
