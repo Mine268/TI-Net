@@ -14,6 +14,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 
+import utils
+
 
 BN_MOMENTUM = 0.1
 logger = logging.getLogger(__name__)
@@ -297,6 +299,11 @@ class ResNet(nn.Module):
         return features
 
 
+'''
+Latent space operator:
+ - Identity
+ - Horizontal fip, Vertical fip, Mirror
+'''
 class SLL_ResNet(nn.Module):
     def __init__(self, block, layers, # num_joints,
                  num_input_channels=3,
@@ -338,16 +345,20 @@ class SLL_ResNet(nn.Module):
             self.num_deconv_kernels,
         )
         # ------------------------------------------------------------------------------
-
+        
         # ------------------------------------------------------------------------------
         # 2. SLL operator
-        self.vf_operator = nn.Sequential(nn.Linear(self.hidden_dim, latent_operator_rank, bias=False),
-                                         nn.Linear(latent_operator_rank, self.hidden_dim, bias=False))
-        self.hf_operator = nn.Sequential(nn.Linear(self.hidden_dim, latent_operator_rank, bias=False),
-                                         nn.Linear(latent_operator_rank, self.hidden_dim, bias=False))
-        self.cm_operator = nn.Sequential(nn.Linear(self.hidden_dim, latent_operator_rank, bias=False),
-                                         nn.Linear(latent_operator_rank, self.hidden_dim, bias=False))
+        self.latent_operator_rank = latent_operator_rank
+        self._make_latent_operator()
         # ------------------------------------------------------------------------------
+
+    def _make_latent_operator(self):
+        self.vf_operator = nn.Sequential(nn.Linear(self.hidden_dim, self.latent_operator_rank, bias=False),
+                                         nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
+        self.hf_operator = nn.Sequential(nn.Linear(self.hidden_dim, self.latent_operator_rank, bias=False),
+                                         nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
+        self.cm_operator = nn.Sequential(nn.Linear(self.hidden_dim, self.latent_operator_rank, bias=False),
+                                         nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -407,7 +418,7 @@ class SLL_ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def latent_operate(self, operator_ix, latent):
-        ''' latent [N,4,D]
+        ''' latent [N,D]
         '''
         if operator_ix == 0:
             latent = self.vf_operator(latent)
@@ -491,4 +502,157 @@ class SLL_ResNet(nn.Module):
 
         pred_0 = pred[:,0].detach()
 
+        return loss, pred_0
+
+
+'''
+Latent space operator:
+ - Identity, Horizontal, Vertical
+ - Rotate
+'''
+class SL4_ResNet(SLL_ResNet):
+    def __init__(self, rot_embed_dim: int = 32,
+                 *args, **kwargs):
+        self.rot_embed_dim = rot_embed_dim
+        super(SL4_ResNet, self).__init__(*args, **kwargs)
+        
+    # overload
+    def _make_latent_operator(self):
+        self.rot_embed = nn.Sequential(nn.Linear(2, self.rot_embed_dim, bias=True), nn.ReLU(),
+                                       nn.Linear(self.rot_embed_dim, self.rot_embed_dim, bias=True), nn.ReLU(),
+                                       nn.Linear(self.rot_embed_dim, self.rot_embed_dim, bias=False))
+        self.horizontal_flip = nn.Sequential(nn.Linear(self.hidden_dim, self.latent_operator_rank, bias=False),
+                                             nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
+        self.rotation = nn.Sequential(nn.Linear(self.hidden_dim + self.rot_embed_dim, self.latent_operator_rank, bias=False),
+                                      nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
+        self.horizontal_rot = nn.Sequential(nn.Linear(self.hidden_dim + self.rot_embed_dim, self.latent_operator_rank, bias=False),
+                                            nn.Linear(self.latent_operator_rank, self.hidden_dim, bias=False))
+
+    def latent_operate(self, operate: str, latent: torch.Tensor, rot: torch.Tensor = None):
+        '''
+        operate:
+         - h: horizontal flip, rot=None
+         - r: rotation, rot required
+         - hr: hflip & rot, rot required
+        
+        latent: [B D]
+        
+        rot: [1] / [B]
+        '''
+        assert operate in ['h', 'r', 'hr'], f"operate '{operate}' is not supported."
+        assert not (operate in ['r', 'hr'] and rot is None), f"rot required."
+
+        if operate == 'h':
+            return self.horizontal_flip(latent)
+        
+        # encode rotation
+        rot = rot if rot.shape[0] == latent.shape[0] else rot.repeat(latent.shape[0])
+        rot.to(latent.device)
+        rot_vec = torch.cat([torch.cos(rot)[...,None], torch.sin(rot)[...,None]], dim=-1)
+        rot_embedding = self.rot_embed(rot_vec)
+        
+        if operate == 'r':
+            return self.rotation(torch.cat([latent, rot_embedding], dim=-1))
+        
+        if operate == 'hr':
+            return self.horizontal_rot(torch.cat([latent, rot_embedding], dim=-1))
+
+    # override
+    def forward_loss(self, imgs, pred, latent, a1, a2, b1, b2):
+        batch_size = imgs.shape[0]
+        # ----------------------------------------------------
+        # 1. Reconstruction loss
+        imgs_0 = imgs[:,0]
+        pred_0 = pred[:,0]
+        recon_loss = F.mse_loss(imgs_0.reshape(batch_size, -1), pred_0.reshape(batch_size, -1))
+        # ----------------------------------------------------
+
+        # ----------------------------------------------------
+        # 2. Structural latent loss
+        # (0) Identity operation
+        loss_iden = F.mse_loss(self.latent_operate('r', latent[0], torch.zeros_like(a1)), latent[0])
+        # (1) Uniary operation
+        loss_uni_h = F.mse_loss(self.latent_operate('h', latent[0]), latent[1])
+        loss_uni_r = F.mse_loss(self.latent_operate('r', latent[0], a1), latent[2]) + \
+                     F.mse_loss(self.latent_operate('r', latent[0], b1), latent[4])
+        loss_uni_hr = F.mse_loss(self.latent_operate('hr', latent[0], a2), latent[3]) + \
+                      F.mse_loss(self.latent_operate('hr', latent[0], b2), latent[5])
+        loss_uni = loss_uni_h + loss_uni_r + loss_uni_hr
+        # (2) Binary operation
+        loss_bin_h_h = F.mse_loss(self.latent_operate('h', self.latent_operate('h', latent[0])), latent[0])
+        loss_bin_h_r = F.mse_loss(self.latent_operate('r', self.latent_operate('h', latent[0]), b1), latent[6])
+        loss_bin_h_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('h', latent[0]), b2), latent[8])
+        loss_bin_r_h = F.mse_loss(self.latent_operate('h', self.latent_operate('r', latent[0], a1)), latent[7])
+        loss_bin_r_r = F.mse_loss(self.latent_operate('r', self.latent_operate('r', latent[0], a1), b1), latent[9])
+        loss_bin_r_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('r', latent[0], a1), b2), latent[11])
+        loss_bin_hr_h = F.mse_loss(self.latent_operate('h', self.latent_operate('hr', latent[0], a2)), latent[10])
+        loss_bin_hr_r = F.mse_loss(self.latent_operate('r', self.latent_operate('hr', latent[0], a2), b1), latent[12])
+        loss_bin_hr_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('hr', latent[0], a2), b2), latent[13])
+        loss_bin = loss_bin_h_h + loss_bin_h_r + loss_bin_h_hr + loss_bin_r_h + loss_bin_r_r + \
+                   loss_bin_r_hr + loss_bin_hr_h + loss_bin_hr_r + loss_bin_hr_hr
+        # (3) Total loss
+        latent_loss = loss_iden + loss_uni + loss_bin
+        # ----------------------------------------------------
+
+        loss = recon_loss + 1e-3 * latent_loss
+        return {"backward": loss,
+                "reconstruction": recon_loss,
+                "latent": latent_loss}
+    
+    # override
+    def forward(self, imgs):
+        '''
+        imgs [N,3,H,W]
+        '''
+        a1 = torch.rand(size=(imgs.shape[0],), device=imgs.device) * 2 * torch.pi
+        a2 = torch.rand(size=(imgs.shape[0],), device=imgs.device) * 2 * torch.pi
+        b1 = torch.rand(size=(imgs.shape[0],), device=imgs.device) * 2 * torch.pi
+        b2 = torch.rand(size=(imgs.shape[0],), device=imgs.device) * 2 * torch.pi
+
+        # 1. one transform
+        imgs_h = utils.horizontal_flip_img(imgs).detach()
+        imgs_r_a1 = utils.rotate_img(imgs, a1).detach()
+        imgs_hr_a2 = utils.hflip_rotate_img(imgs, a2).detach()
+        imgs_r_b1 = utils.rotate_img(imgs, b1).detach()
+        imgs_hr_b2 = utils.hflip_rotate_img(imgs, b2).detach()
+        
+        # 2. two transform
+        imgs_hr_b1 = utils.hflip_rotate_img(imgs, b1).detach()
+        imgs_hr_na1 = utils.hflip_rotate_img(imgs, -a1).detach()
+        imgs_r_b2 = utils.rotate_img(imgs, b2).detach()
+        imgs_r_a1_b1 = utils.rotate_img(imgs, a1 + b1).detach()
+        imgs_r_na2 = utils.rotate_img(imgs, -a2).detach()
+        imgs_hr_na1_b2 = utils.hflip_rotate_img(imgs, -a1 + b2).detach()
+        imgs_hr_a2_b1 = utils.hflip_rotate_img(imgs, a2 + b1).detach()
+        imgs_r_na2_b2 = utils.rotate_img(imgs, -a2 + b2).detach()
+
+        # 3. batch-up images
+        imgs_batch = einops.rearrange(
+            torch.cat([imgs[:,None],  # 0
+                       imgs_h[:,None],
+                       imgs_r_a1[:,None],  # 2
+                       imgs_hr_a2[:,None],
+                       imgs_r_b1[:,None],  # 4
+                       imgs_hr_b2[:,None],
+                       imgs_hr_b1[:,None],  # 6
+                       imgs_hr_na1[:,None],
+                       imgs_r_b2[:,None],  # 8
+                       imgs_r_a1_b1[:,None],
+                       imgs_r_na2[:,None],  # 10
+                       imgs_hr_na1_b2[:,None],
+                       imgs_hr_a2_b1[:,None],  # 12
+                       imgs_r_na2_b2[:,None]], dim=1),
+            'b t ... -> (b t) ...', t=14
+        )
+        
+        feature_map = self.forward_encoder(imgs_batch)
+        pred = self.forward_decoder(feature_map)
+
+        imgs_batch = einops.rearrange(imgs_batch, '(b t) ... -> b t ...', t=14)
+        pred = einops.rearrange(pred, '(b t) ... -> b t ...', t=14)
+        feature_map = einops.rearrange(feature_map, '(b t) ... -> b t ...', t=14)
+        latent = torch.mean(einops.rearrange(feature_map, 'b t ... h w -> t b ... (h w)', t=14), dim=-1)
+        
+        loss = self.forward_loss(imgs_batch, pred, latent, a1, a2, b1, b2)
+        pred_0 = pred[:,0].detach()
         return loss, pred_0

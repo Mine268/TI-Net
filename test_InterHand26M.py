@@ -101,6 +101,7 @@ def test(args):
     model_class, model_arch = model_str.split('/')
     if model_class == 'vit':
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
+        # TODO: load checkpoint from the file
     elif model_class == 'resnet':
         model: nn.Module = resnet.__dict__[model_arch]()
         ckpt = torch.load(args.backbone_ckpt, map_location="cpu", weights_only=False)

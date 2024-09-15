@@ -101,3 +101,20 @@ CUDA_VISIBLE_DEVICES=7 nohup python finetune_InterHand26M.py \
 
 bs=192, pid=18680
 bs=32, pid 9742
+
+
+sl4 pretrain
+```bash
+CUDA_VISIBLE_DEVICES=4,5 python -m torch.distributed.launch --nproc_per_node=2 --master_port 25904 pretrain.py \
+	--data_path ./data/Imagenet-21K-P \
+	--batch_size 18 \
+	--epochs 100 \
+	--model resnet/sl4_resnet50 \
+	--clip_grad 5.0 \
+	--blr 1.5e-4 \
+	--warmup_epochs 0 \
+	--pin_mem \
+	--output_dir logs/20240915-1 \
+	--log_dir logs/20240915-1 \
+	--num_workers 40
+```

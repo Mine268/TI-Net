@@ -20,7 +20,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import make_grid
 from torchvision.transforms import InterpolationMode
 import timm.optim.optim_factory as optim_factory
-import einops as eps
+import einops
 
 import misc
 from misc import NativeScalerWithGradNormCount as NativeScaler
