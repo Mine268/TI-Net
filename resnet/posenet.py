@@ -63,13 +63,15 @@ class PoseResNet(nn.Module):
         if not self.pretrained_backbone:
             self.backbone.train(mode)
         self.pose_mlp.train(mode)
+        print(f"trigger TRAIN mode, train backbone: {(not self.pretrained_backbone) and mode}")
         return self
 
     def eval(self):
         if not self.pretrained_backbone:
             self.backbone.eval()
         self.pose_mlp.eval()
-        pass
+        print(f"trigger EVAL mode")
+        return self
 
     def extract_feature(self, x):
         x = self.backbone.conv1(x)

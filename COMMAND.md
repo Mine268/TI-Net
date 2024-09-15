@@ -107,6 +107,7 @@ sl4 pretrain
 ```bash
 CUDA_VISIBLE_DEVICES=4,5 python -m torch.distributed.launch --nproc_per_node=2 --master_port 25904 pretrain.py \
 	--data_path ./data/Imagenet-21K-P \
+	--rot_aug false \
 	--batch_size 18 \
 	--epochs 100 \
 	--model resnet/sl4_resnet50 \

@@ -47,6 +47,8 @@ def get_args_parser():
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
+    parser.add_argument('--train_binary_operation', default=False, type=bool,
+                        help='Introducing combination into loss')
 
     # Optimizer parameters
     parser.add_argument('--weight_decay', type=float, default=0.05,
@@ -67,6 +69,7 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data_path', default='./data/Imagenet-21K-P', type=str,
                         help='dataset path')
+    parser.add_argument('--rot_aug', default=True, type=bool)
 
     parser.add_argument('--output_dir', default='./logs/debug',
                         help='path where to save, empty for no saving')
@@ -168,9 +171,8 @@ def train_one_epoch(model: torch.nn.Module,
             recon_vis = torch.cat([samples, pred], dim=-1).detach().cpu()
             recon_vis = recon_vis * torch.tensor([0.229, 0.224, 0.225]).to(recon_vis.device)[None,:,None,None] + \
                 torch.tensor([0.485, 0.456, 0.406]).to(recon_vis.device)[None,:,None,None]
-            recon_vis = make_grid(recon_vis, 4, padding=2)
+            recon_vis = make_grid(recon_vis[:min(16, recon_vis.shape[0])], 4, padding=2)
             log_writer.add_image('recon', recon_vis, epoch_1000x)
-
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -200,7 +202,7 @@ def main(args):
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),  # 3 is bicubic
             # transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation((0, 360)),
+            transforms.RandomRotation((0, 360)) if args.rot_aug else lambda x: x,
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
@@ -236,7 +238,7 @@ def main(args):
     if model_class == 'vit':
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
     elif model_class == 'resnet':
-        model = resnet.__dict__[model_arch]()
+        model = resnet.__dict__[model_arch](train_binary_operation=args.train_binary_operation)
     else:
         assert False, "model not supported: %s" % model_str
 

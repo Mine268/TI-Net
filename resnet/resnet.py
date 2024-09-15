@@ -5,14 +5,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
+from typing import *
 import logging
 
 import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
 
 import utils
 
@@ -194,6 +193,7 @@ class ResNet(nn.Module):
                  num_deconv_filters=(256, 256, 256),
                  num_deconv_kernels=(4, 4, 4),
                  final_conv_kernel=1,
+                 *args, **kwargs
                  ):
         super().__init__()
 
@@ -312,9 +312,13 @@ class SLL_ResNet(nn.Module):
                  num_deconv_filters=(256, 256, 256),
                  num_deconv_kernels=(4, 4, 4),
                  final_conv_kernel=1,
-                 latent_operator_rank=128
+                 latent_operator_rank=128,
+                 *args, **kwargs
                  ):
         super().__init__()
+
+        if "train_binary_operation" in kwargs.keys():
+            print("argument 'train_binary_operation' is not valid for SLL_ResNet, ignored.")
 
         # ------------------------------------------------------------------------------
         # 1. ResNet backbone 
@@ -428,7 +432,7 @@ class SLL_ResNet(nn.Module):
             latent = self.cm_operator(latent)
         return latent
 
-    def forward_encoder(self, x):
+    def forward_encoder(self, x) -> torch.Tensor:
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -439,7 +443,7 @@ class SLL_ResNet(nn.Module):
         feature_map = self.layer4(x)
         return feature_map
     
-    def forward_decoder(self, x):
+    def forward_decoder(self, x) -> torch.Tensor:
         x = self.deconv_layers(x)
         return x
 
@@ -511,9 +515,14 @@ Latent space operator:
  - Rotate
 '''
 class SL4_ResNet(SLL_ResNet):
-    def __init__(self, rot_embed_dim: int = 32,
+    
+    def __init__(self,
+                 rot_embed_dim: int = 32,
+                 train_binary_operation: bool = False,
                  *args, **kwargs):
         self.rot_embed_dim = rot_embed_dim
+        self.t_num = 14 if train_binary_operation else 4
+        self.train_binary_operation = train_binary_operation
         super(SL4_ResNet, self).__init__(*args, **kwargs)
         
     # overload
@@ -573,23 +582,28 @@ class SL4_ResNet(SLL_ResNet):
         loss_iden = F.mse_loss(self.latent_operate('r', latent[0], torch.zeros_like(a1)), latent[0])
         # (1) Uniary operation
         loss_uni_h = F.mse_loss(self.latent_operate('h', latent[0]), latent[1])
-        loss_uni_r = F.mse_loss(self.latent_operate('r', latent[0], a1), latent[2]) + \
-                     F.mse_loss(self.latent_operate('r', latent[0], b1), latent[4])
-        loss_uni_hr = F.mse_loss(self.latent_operate('hr', latent[0], a2), latent[3]) + \
-                      F.mse_loss(self.latent_operate('hr', latent[0], b2), latent[5])
+        if self.train_binary_operation:
+            loss_uni_r = F.mse_loss(self.latent_operate('r', latent[0], a1), latent[2]) + F.mse_loss(self.latent_operate('r', latent[0], b1), latent[4])
+            loss_uni_hr = F.mse_loss(self.latent_operate('hr', latent[0], a2), latent[3]) + F.mse_loss(self.latent_operate('hr', latent[0], b2), latent[5])
+        else:
+            loss_uni_r = F.mse_loss(self.latent_operate('r', latent[0], a1), latent[2])
+            loss_uni_hr = F.mse_loss(self.latent_operate('hr', latent[0], a2), latent[3])
         loss_uni = loss_uni_h + loss_uni_r + loss_uni_hr
         # (2) Binary operation
-        loss_bin_h_h = F.mse_loss(self.latent_operate('h', self.latent_operate('h', latent[0])), latent[0])
-        loss_bin_h_r = F.mse_loss(self.latent_operate('r', self.latent_operate('h', latent[0]), b1), latent[6])
-        loss_bin_h_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('h', latent[0]), b2), latent[8])
-        loss_bin_r_h = F.mse_loss(self.latent_operate('h', self.latent_operate('r', latent[0], a1)), latent[7])
-        loss_bin_r_r = F.mse_loss(self.latent_operate('r', self.latent_operate('r', latent[0], a1), b1), latent[9])
-        loss_bin_r_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('r', latent[0], a1), b2), latent[11])
-        loss_bin_hr_h = F.mse_loss(self.latent_operate('h', self.latent_operate('hr', latent[0], a2)), latent[10])
-        loss_bin_hr_r = F.mse_loss(self.latent_operate('r', self.latent_operate('hr', latent[0], a2), b1), latent[12])
-        loss_bin_hr_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('hr', latent[0], a2), b2), latent[13])
-        loss_bin = loss_bin_h_h + loss_bin_h_r + loss_bin_h_hr + loss_bin_r_h + loss_bin_r_r + \
-                   loss_bin_r_hr + loss_bin_hr_h + loss_bin_hr_r + loss_bin_hr_hr
+        if self.train_binary_operation:
+            loss_bin_h_h = F.mse_loss(self.latent_operate('h', self.latent_operate('h', latent[0])), latent[0])
+            loss_bin_h_r = F.mse_loss(self.latent_operate('r', self.latent_operate('h', latent[0]), b1), latent[6])
+            loss_bin_h_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('h', latent[0]), b2), latent[8])
+            loss_bin_r_h = F.mse_loss(self.latent_operate('h', self.latent_operate('r', latent[0], a1)), latent[7])
+            loss_bin_r_r = F.mse_loss(self.latent_operate('r', self.latent_operate('r', latent[0], a1), b1), latent[9])
+            loss_bin_r_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('r', latent[0], a1), b2), latent[11])
+            loss_bin_hr_h = F.mse_loss(self.latent_operate('h', self.latent_operate('hr', latent[0], a2)), latent[10])
+            loss_bin_hr_r = F.mse_loss(self.latent_operate('r', self.latent_operate('hr', latent[0], a2), b1), latent[12])
+            loss_bin_hr_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('hr', latent[0], a2), b2), latent[13])
+            loss_bin = loss_bin_h_h + loss_bin_h_r + loss_bin_h_hr + loss_bin_r_h + loss_bin_r_r + \
+                       loss_bin_r_hr + loss_bin_hr_h + loss_bin_hr_r + loss_bin_hr_hr
+        else:
+            loss_bin = torch.Tensor(0, device=loss_iden.device)
         # (3) Total loss
         latent_loss = loss_iden + loss_uni + loss_bin
         # ----------------------------------------------------
@@ -641,17 +655,19 @@ class SL4_ResNet(SLL_ResNet):
                        imgs_r_na2[:,None],  # 10
                        imgs_hr_na1_b2[:,None],
                        imgs_hr_a2_b1[:,None],  # 12
-                       imgs_r_na2_b2[:,None]], dim=1),
-            'b t ... -> (b t) ...', t=14
+                       imgs_r_na2_b2[:,None]],
+                       dim=1),
+            'b t ... -> (b t) ...', t=self.t_num
         )
+        imgs_batch = imgs_batch[:self.t_num]
         
         feature_map = self.forward_encoder(imgs_batch)
         pred = self.forward_decoder(feature_map)
 
-        imgs_batch = einops.rearrange(imgs_batch, '(b t) ... -> b t ...', t=14)
-        pred = einops.rearrange(pred, '(b t) ... -> b t ...', t=14)
-        feature_map = einops.rearrange(feature_map, '(b t) ... -> b t ...', t=14)
-        latent = torch.mean(einops.rearrange(feature_map, 'b t ... h w -> t b ... (h w)', t=14), dim=-1)
+        imgs_batch = einops.rearrange(imgs_batch, '(b t) ... -> b t ...', t=self.t_num)
+        pred = einops.rearrange(pred, '(b t) ... -> b t ...', t=self.t_num)
+        feature_map = einops.rearrange(feature_map, '(b t) ... -> b t ...', t=self.t_num)
+        latent = torch.mean(einops.rearrange(feature_map, 'b t ... h w -> t b ... (h w)', t=self.t_num), dim=-1)
         
         loss = self.forward_loss(imgs_batch, pred, latent, a1, a2, b1, b2)
         pred_0 = pred[:,0].detach()
