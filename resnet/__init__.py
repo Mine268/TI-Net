@@ -44,7 +44,7 @@ def pose_resnet152(backbone_ckpt=None):
     return model
 
 
-def sll_resnet18():
+def sll_resnet18(**kwargs):
     block_class, layers = resnet_spec[18]
     model = SLL_ResNet(
         block=block_class, layers=layers,
@@ -57,7 +57,7 @@ def sll_resnet18():
     )
     return model
 
-def sll_resnet34():
+def sll_resnet34(**kwargs):
     block_class, layers = resnet_spec[34]
     model = SLL_ResNet(
         block=block_class, layers=layers,
@@ -70,7 +70,7 @@ def sll_resnet34():
     )
     return model
 
-def sll_resnet50():
+def sll_resnet50(**kwargs):
     block_class, layers = resnet_spec[50]
     model = SLL_ResNet(
         block=block_class, layers=layers,
@@ -83,7 +83,7 @@ def sll_resnet50():
     )
     return model
 
-def sll_resnet101():
+def sll_resnet101(**kwargs):
     block_class, layers = resnet_spec[101]
     model = SLL_ResNet(
         block=block_class, layers=layers,
@@ -96,7 +96,7 @@ def sll_resnet101():
     )
     return model
 
-def sll_resnet152():
+def sll_resnet152(**kwargs):
     block_class, layers = resnet_spec[152]
     model = SLL_ResNet(
         block=block_class, layers=layers,
@@ -111,7 +111,7 @@ def sll_resnet152():
 
 
 
-def sl4_resnet18():
+def sl4_resnet18(**kwargs):
     block_class, layers = resnet_spec[18]
     model = SL4_ResNet(
         block=block_class, layers=layers,
@@ -120,11 +120,12 @@ def sl4_resnet18():
         num_deconv_layers=5,
         num_deconv_filters=[256, 256, 256, 256, 3],
         num_deconv_kernels=[4, 4, 4, 4, 4],
-        final_conv_kernel=1
+        final_conv_kernel=1,
+        **kwargs
     )
     return model
 
-def sl4_resnet34():
+def sl4_resnet34(**kwargs):
     block_class, layers = resnet_spec[34]
     model = SL4_ResNet(
         block=block_class, layers=layers,
@@ -133,11 +134,12 @@ def sl4_resnet34():
         num_deconv_layers=5,
         num_deconv_filters=[256, 256, 256, 256, 3],
         num_deconv_kernels=[4, 4, 4, 4, 4],
-        final_conv_kernel=1
+        final_conv_kernel=1,
+        **kwargs
     )
     return model
 
-def sl4_resnet50():
+def sl4_resnet50(**kwargs):
     block_class, layers = resnet_spec[50]
     model = SL4_ResNet(
         block=block_class, layers=layers,
@@ -146,11 +148,12 @@ def sl4_resnet50():
         num_deconv_layers=5,
         num_deconv_filters=[256, 256, 256, 256, 3],
         num_deconv_kernels=[4, 4, 4, 4, 4],
-        final_conv_kernel=1
+        final_conv_kernel=1,
+        **kwargs
     )
     return model
 
-def sl4_resnet101():
+def sl4_resnet101(**kwargs):
     block_class, layers = resnet_spec[101]
     model = SL4_ResNet(
         block=block_class, layers=layers,
@@ -159,11 +162,12 @@ def sl4_resnet101():
         num_deconv_layers=5,
         num_deconv_filters=[256, 256, 256, 256, 3],
         num_deconv_kernels=[4, 4, 4, 4, 4],
-        final_conv_kernel=1
+        final_conv_kernel=1,
+        **kwargs
     )
     return model
 
-def sl4_resnet152():
+def sl4_resnet152(**kwargs):
     block_class, layers = resnet_spec[152]
     model = SL4_ResNet(
         block=block_class, layers=layers,
@@ -172,7 +176,8 @@ def sl4_resnet152():
         num_deconv_layers=5,
         num_deconv_filters=[256, 256, 256, 256, 3],
         num_deconv_kernels=[4, 4, 4, 4, 4],
-        final_conv_kernel=1
+        final_conv_kernel=1,
+        **kwargs
     )
     return model
 

@@ -425,12 +425,12 @@ class SLL_ResNet(nn.Module):
         ''' latent [N,D]
         '''
         if operator_ix == 0:
-            latent = self.vf_operator(latent)
+            latent2 = self.vf_operator(latent)
         if operator_ix == 1:
-            latent = self.hf_operator(latent)
+            latent2 = self.hf_operator(latent)
         if operator_ix == 2:
-            latent = self.cm_operator(latent)
-        return latent
+            latent2 = self.cm_operator(latent)
+        return latent2 + latent
 
     def forward_encoder(self, x) -> torch.Tensor:
         x = self.conv1(x)
@@ -451,9 +451,10 @@ class SLL_ResNet(nn.Module):
         batch_size = imgs.shape[0]
         # ----------------------------------------------------
         # 1. Reconstruction loss
-        imgs_0 = imgs[:,0]
-        pred_0 = pred[:,0]
-        recon_loss = F.mse_loss(imgs_0.reshape(batch_size, -1), pred_0.reshape(batch_size, -1))
+        # imgs_0 = imgs[:,0]
+        # pred_0 = pred[:,0]
+        # recon_loss = F.mse_loss(imgs_0.reshape(batch_size, -1), pred_0.reshape(batch_size, -1))
+        recon_loss = F.mse_loss(pred, imgs)
         # ----------------------------------------------------
 
         # ----------------------------------------------------
@@ -552,7 +553,7 @@ class SL4_ResNet(SLL_ResNet):
         assert not (operate in ['r', 'hr'] and rot is None), f"rot required."
 
         if operate == 'h':
-            return self.horizontal_flip(latent)
+            return latent + self.horizontal_flip(latent)
         
         # encode rotation
         rot = rot if rot.shape[0] == latent.shape[0] else rot.repeat(latent.shape[0])
@@ -561,19 +562,20 @@ class SL4_ResNet(SLL_ResNet):
         rot_embedding = self.rot_embed(rot_vec)
         
         if operate == 'r':
-            return self.rotation(torch.cat([latent, rot_embedding], dim=-1))
+            return latent + self.rotation(torch.cat([latent, rot_embedding], dim=-1))
         
         if operate == 'hr':
-            return self.horizontal_rot(torch.cat([latent, rot_embedding], dim=-1))
+            return latent + self.horizontal_rot(torch.cat([latent, rot_embedding], dim=-1))
 
     # override
     def forward_loss(self, imgs, pred, latent, a1, a2, b1, b2):
         batch_size = imgs.shape[0]
         # ----------------------------------------------------
         # 1. Reconstruction loss
-        imgs_0 = imgs[:,0]
-        pred_0 = pred[:,0]
-        recon_loss = F.mse_loss(imgs_0.reshape(batch_size, -1), pred_0.reshape(batch_size, -1))
+        # imgs_0 = imgs[:,0]
+        # pred_0 = pred[:,0]
+        # recon_loss = F.mse_loss(imgs_0.reshape(batch_size, -1), pred_0.reshape(batch_size, -1))
+        recon_loss = F.mse_loss(pred, imgs)
         # ----------------------------------------------------
 
         # ----------------------------------------------------

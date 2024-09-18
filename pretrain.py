@@ -78,7 +78,7 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--resume', default='',
+    parser.add_argument('--resume', default=None, type=str,
                         help='resume from checkpoint')
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
@@ -121,8 +121,9 @@ def train_one_epoch(model: torch.nn.Module,
     for data_iter_step, (samples, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
-        if data_iter_step % accum_iter == 0:
-            lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+        # don't adjust the lr
+        # if data_iter_step % accum_iter == 0:
+        #     lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         samples = samples.to(device, non_blocking=True)
 
@@ -188,6 +189,7 @@ def main(args):
     # writing trainig config to file
     with open(os.path.join(args.output_dir, "config.txt"), mode="a", encoding="utf-8") as f:
         f.write("{}".format(args).replace(', ', ',\n'))
+        f.write("\n\n")
 
     device = torch.device(args.device)
 
