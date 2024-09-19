@@ -604,10 +604,11 @@ class SL4_ResNet(SLL_ResNet):
             loss_bin_hr_hr = F.mse_loss(self.latent_operate('hr', self.latent_operate('hr', latent[0], a2), b2), latent[13])
             loss_bin = loss_bin_h_h + loss_bin_h_r + loss_bin_h_hr + loss_bin_r_h + loss_bin_r_r + \
                        loss_bin_r_hr + loss_bin_hr_h + loss_bin_hr_r + loss_bin_hr_hr
-        else:
-            loss_bin = torch.Tensor(0, device=loss_iden.device)
         # (3) Total loss
-        latent_loss = loss_iden + loss_uni + loss_bin
+        if self.train_binary_operation:
+            latent_loss = loss_iden + loss_uni + loss_bin
+        else:
+            latent_loss = loss_iden + loss_uni
         # ----------------------------------------------------
 
         loss = recon_loss + 1e-3 * latent_loss
@@ -658,10 +659,9 @@ class SL4_ResNet(SLL_ResNet):
                        imgs_hr_na1_b2[:,None],
                        imgs_hr_a2_b1[:,None],  # 12
                        imgs_r_na2_b2[:,None]],
-                       dim=1),
+                       dim=1)[:,:self.t_num],
             'b t ... -> (b t) ...', t=self.t_num
         )
-        imgs_batch = imgs_batch[:self.t_num]
         
         feature_map = self.forward_encoder(imgs_batch)
         pred = self.forward_decoder(feature_map)
