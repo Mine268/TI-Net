@@ -32,10 +32,10 @@ class PoseResNet(nn.Module):
                                       nn.ReLU(inplace=True),
                                       nn.Linear(1024, 1024),
                                       nn.ReLU(inplace=True),
-                                      nn.Linear(1024, 1024),
-                                      nn.ReLU(inplace=True),
-                                      nn.Linear(1024, 1024),
-                                      nn.ReLU(inplace=True),
+                                    #   nn.Linear(1024, 1024),
+                                    #   nn.ReLU(inplace=True),
+                                    #   nn.Linear(1024, 1024),
+                                    #   nn.ReLU(inplace=True),
                                       nn.Linear(1024, 16*3),
                                       Rearrange('b (j d) -> b j d', j=16, d=3))
         self.pretrained_backbone = backbone_ckpt is not None
