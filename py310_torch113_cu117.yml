@@ -139,7 +139,7 @@ dependencies:
     - tensorboard-data-server==0.7.2
     - tensorboardx==2.6.2.2
     - terminado==0.18.1
-    - timm==1.0.9
+    - timm==0.5.4
     - tinycss2==1.2.1
     - tomli==2.0.1
     - torch==1.13.1+cu117
