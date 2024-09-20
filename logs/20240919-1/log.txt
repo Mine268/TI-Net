@@ -1,0 +1,10 @@
+{"train_lr": 0.002390625000000121, "train_backward": 1.0920583089129434, "train_reconstruction": 1.0919949358689052, "train_latent": 0.06337287689098443, "epoch": 0}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0460303535095699, "train_reconstruction": 1.0460153864574027, "train_latent": 0.014966654754886424, "epoch": 1}
+{"train_lr": 0.002390625000000121, "train_backward": 1.040590981923977, "train_reconstruction": 1.0405792985847042, "train_latent": 0.011683467892542355, "epoch": 2}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0374662758881372, "train_reconstruction": 1.037455467205898, "train_latent": 0.010808521604032954, "epoch": 3}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0358534555336472, "train_reconstruction": 1.0358429116934476, "train_latent": 0.010543838430135738, "epoch": 4}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0346408181477758, "train_reconstruction": 1.0346303204916845, "train_latent": 0.010497699285987884, "epoch": 5}
+{"train_lr": 0.002390625000000121, "train_backward": 1.033831942388333, "train_reconstruction": 1.0338213467389155, "train_latent": 0.01059590347967409, "epoch": 6}
+{"train_lr": 0.002390625000000121, "train_backward": 1.033350686839685, "train_reconstruction": 1.0333401385196455, "train_latent": 0.010548438994122982, "epoch": 7}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0329007721250985, "train_reconstruction": 1.0328902929230355, "train_latent": 0.010479327536538054, "epoch": 8}
+{"train_lr": 0.002390625000000121, "train_backward": 1.0321805942020599, "train_reconstruction": 1.0321702104148844, "train_latent": 0.010383827701772538, "epoch": 9}
