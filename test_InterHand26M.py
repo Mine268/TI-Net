@@ -22,7 +22,7 @@ def parse_arg():
     parser = argparse.ArgumentParser("Testing")
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--model", default="resnet/pose_resnet50", type=str)
-    parser.add_argument("--backbone_ckpt", default=None, required=True, type=str)
+    parser.add_argument("--ckpt", default=None, required=True, type=str)
     parser.add_argument("--output_dir", default="./logs/debug")
     parser.add_argument("--device", default=0, type=int, help="Only support single GPU inference")
     parser.add_argument("--num_workers", default=4, type=int)
@@ -95,7 +95,7 @@ def test(args):
         transforms.Resize((224, 224))
     ])
     dataset_train = InterHand26M(transforms_test, "test")
-    dataloader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, pin_memory=True)
+    dataloader = torch.utils.data.DataLoader(dataset_train, batch_size=args.batch_size, pin_memory=True, drop_last=True)
 
     model_str = args.model
     model_class, model_arch = model_str.split('/')
@@ -104,7 +104,7 @@ def test(args):
         # TODO: load checkpoint from the file
     elif model_class == 'resnet':
         model: nn.Module = resnet.__dict__[model_arch]()
-        ckpt = torch.load(args.backbone_ckpt, map_location="cpu", weights_only=False)
+        ckpt = torch.load(args.ckpt, map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt['model'])
     else:
         assert False, "model not supported: %s" % model_str
