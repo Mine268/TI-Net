@@ -144,7 +144,7 @@ def test(args):
 
     time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     with open(os.path.join(args.output_dir, f"eval_InterHand26M_{time_str}.txt"), "w") as f:
-        f.write(f"MPJPE: {mpjpe} m\nfMPVPE: {mpvpe} m")
+        f.write(f"MPJPE: {mpjpe} m\nMPVPE: {mpvpe} m")
 
 
 if __name__ == "__main__":
