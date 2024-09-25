@@ -28,4 +28,3 @@
 {"train_lr": 6.4717746499589974e-06, "train_backward": 2.9449727025506856, "train_loss_mano": 2.9449727025506856, "epoch": 27}
 {"train_lr": 2.3931183712796126e-06, "train_backward": 2.911938710790678, "train_loss_mano": 2.911938710790678, "epoch": 28}
 {"train_lr": 3.4253182382977654e-07, "train_backward": 2.8959627625369033, "train_loss_mano": 2.8959627625369033, "epoch": 29}
-
