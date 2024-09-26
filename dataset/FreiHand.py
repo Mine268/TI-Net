@@ -73,8 +73,10 @@ class FreiHand(Dataset):
             root_pose, _ = cv2.Rodrigues(rot_mat.numpy() @ root_pose)
             pose[:3] = torch.from_numpy(root_pose.reshape(3))
 
-            rot_angle = rot_deg * 180
-            img = kornia.geometry.transform.rotate(img[None,...], rot_angle)[0]
+            kps3d = (rot_mat @ kps3d.T).T
+
+            rot_ang = rot_deg * 180 / torch.pi
+            img = kornia.geometry.transform.rotate(img[None,...], rot_ang)[0]
 
         return {"image": img,
                 "K": intr,
