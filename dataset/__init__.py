@@ -1,3 +1,5 @@
+from .FreiHand import FreiHand
+
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
 
