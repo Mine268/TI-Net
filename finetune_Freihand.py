@@ -1,6 +1,3 @@
-# ---
-# reference: https://github.com/facebookresearch/mae
-# ---
 import sys
 import os
 from typing import *
@@ -28,21 +25,24 @@ import resnet
 import lr_sched
 from loss import PoseLoss
 
-from dataset.InterHand26M import InterHand26M
+from dataset import FreiHand
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Pretraining', add_help=False)
     parser.add_argument('--batch_size', default=16, type=int,
-                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+                        help='Batch size per GPU (effective batch size is batch_size * accum_iter" \
+                            " * "# gpus')
     parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
-                        help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
+                        help='Accumulate gradient iterations (for increasing the effective batch " \
+                            "size under memory constraints)')
 
     # Model parameters
     parser.add_argument('--model', default='resnet/pose_resnet50', type=str, metavar='MODEL',
                         help='Name of model to finetune')
-    parser.add_argument('--backbone_ckpt', default=None, type=str, help='Path to pre-trained backbone checkpoint')
+    parser.add_argument('--backbone_ckpt', default=None, type=str, help='Path to pre-trained " \
+                            "backbone checkpoint')
 
     parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
@@ -67,10 +67,6 @@ def get_args_parser():
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
 
-    # Dataset parameters
-    # parser.add_argument('--data_path', default='./data/InterHand26M', type=str,  # data path to InterHand26M
-    #                     help='dataset path')
-
     parser.add_argument('--output_dir', default='./logs/debug',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./logs/debug',
@@ -85,7 +81,8 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--num_workers', default=4, type=int)
     parser.add_argument('--pin_mem', action='store_true',
-                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
+                        help='Pin CPU memory in DataLoader for more efficient (sometimes) " \
+                            "transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
@@ -101,8 +98,11 @@ def get_args_parser():
 
 
 def train_one_epoch(model: torch.nn.Module,
-                    data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, loss_scaler,
+                    data_loader: Iterable,
+                    optimizer: torch.optim.Optimizer,
+                    device: torch.device,
+                    epoch: int,
+                    loss_scaler,
                     log_writer=None,
                     args=None):
     model.train(True)
@@ -116,42 +116,22 @@ def train_one_epoch(model: torch.nn.Module,
     pose_loss = PoseLoss()
     optimizer.zero_grad()
 
-    for data_iter_step, (inputs_, targets_, meta_info_) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-    # for data_iter_step, (inputs_, targets_, meta_info_) in enumerate(data_loader):
+    for data_iter_step, data_item in enumerate(
+        metric_logger.log_every(data_loader, print_freq, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        # inputs to cuda
-        for key, value in inputs_.items():
-            inputs_[key] = value.to(device, non_blocking=True)
-        # targets to cuda
-        for key, value in targets_.items():
-            targets_[key] = value.to(device, non_blocking=True)
-        # meta info to cuda
-        for key, value in meta_info_.items():
-            meta_info_[key] = value.to(device, non_blocking=True)
+        images = data_item['image'].to(device)
+        pose_gt = data_item['pose'].to(device)
 
-        # * construct the input tensor
-        rhand_img = inputs_['rhand_img']
-        lhand_img = torch.flip(inputs_['lhand_img'], dims=[3])  # flip the left to right
-        samples = torch.concatenate((rhand_img, lhand_img), dim=0)
-
-        with torch.cuda.amp.autocast():
-            pred = model(samples)
-
-        # * restore the flip operation
-        mano_pose = einops.rearrange(pred, '(h b) j d -> h b j d', h=2, j=16, d=3)
-        rmano_pose = mano_pose[0]
-        lmano_pose = mano_pose[1]
-        lmano_pose = torch.cat([lmano_pose[:,:,0:1], -lmano_pose[:,:,1:3]], dim=2)
-        mano_pose = einops.rearrange(torch.cat([rmano_pose, lmano_pose], dim=1), 'b (h j) d -> b (h j d)', h=2, j=16, d=3)
+        with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
+            pose_pred = model(images)
 
         # * calculate the loss
-        loss_mano = pose_loss(mano_pose, targets_['mano_pose'], meta_info_['mano_pose_valid'])
+        loss_mano = pose_loss(pose_pred, pose_gt) 
         loss = {'backward': loss_mano, 'loss_mano': loss_mano}
 
-        # TODO: calculate the `loss`.
         loss_value = loss['backward'].item()
 
         if not math.isfinite(loss_value):
@@ -161,7 +141,10 @@ def train_one_epoch(model: torch.nn.Module,
         for k in loss.keys():
             loss[k] /= accum_iter
         # NOTE: clip_grad, avoid nan
-        loss_scaler(loss['backward'], optimizer, clip_grad=args.clip_grad, parameters=model.parameters(),
+        loss_scaler(loss['backward'],
+                    optimizer,
+                    clip_grad=args.clip_grad,
+                    parameters=model.parameters(),
                     update_grad=(data_iter_step + 1) % accum_iter == 0)
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.zero_grad()
@@ -199,6 +182,7 @@ def train_one_epoch(model: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+
 def main(args):
     misc.init_distributed_mode(args)
 
@@ -218,13 +202,7 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # * Resize image to 224*224
-    # * Images have be preprocessed by dataset class into torch.Tensor, 
-    # * only things to be done is resizing.
-    transforms_train = transforms.Compose([
-        transforms.Resize((224, 224))
-    ])
-    dataset_train = InterHand26M(transforms_train, "train") 
+    dataset_train = FreiHand(mode="train")
     print(dataset_train)
 
     if True:  # ? args.distributed:
@@ -279,7 +257,8 @@ def main(args):
     print("effective batch size: %d" % eff_batch_size)
 
     if args.distributed: 
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu],
+                                                          find_unused_parameters=True)
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
@@ -288,7 +267,8 @@ def main(args):
     print(optimizer)
     loss_scaler = NativeScaler()
 
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
@@ -302,7 +282,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 1 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
@@ -319,6 +299,7 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+
 
 
 if __name__ == '__main__':

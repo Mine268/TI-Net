@@ -9,10 +9,12 @@ import torch
 from torch.utils.data.dataset import Dataset
 import torchvision.transforms as transforms
 
+from utils import crop_img
+
 
 class FreiHand(Dataset):
     def __init__(self, mode, root="./data/freihand"):
-        assert mode in ["train", "val"]
+        assert mode in ["train", "test"]
         self.mode = mode
         if mode == "train":
             self.data_root = os.path.join(root, "training")
@@ -21,7 +23,7 @@ class FreiHand(Dataset):
             self.kps_file = os.path.join(root, "training_xyz.json")
             self.mano_file = os.path.join(root, "training_mano.json")
         else:
-            self.data_root = os.path.joint(root, "evaluation")
+            self.data_root = os.path.join(root, "evaluation")
             self.img_root = os.path.join(self.data_root, "rgb")
             self.intr_file = os.path.join(root, "evaluation_K.json")
             self.kps_file = os.path.join(root, "evaluation_xyz.json")
@@ -29,6 +31,7 @@ class FreiHand(Dataset):
 
         self.image_preprocessing = transforms.Compose([
             transforms.ToTensor(),
+            transforms.Resize(size=(224, 224)),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
         with open(self.intr_file, "r") as f:
@@ -77,6 +80,17 @@ class FreiHand(Dataset):
 
             rot_ang = rot_deg * 180 / torch.pi
             img = kornia.geometry.transform.rotate(img[None,...], rot_ang)[0]
+
+        # * crop the image to focus on hand
+        kps2d = (intr @ kps3d.T).T
+        kps2d = kps2d[..., :-1] / kps2d[..., -1:]
+        y_min, y_max = float(kps2d[:,0].min()), float(kps2d[:,0].max())
+        x_min, x_max = float(kps2d[:,1].min()), float(kps2d[:,1].max())
+        bbox_center = ((x_min + x_max) / 2, (y_min + y_max) / 2)
+        bbox_size = ((x_max - x_min) * 1.2, (y_max - y_min) * 1.2)
+        img = crop_img(img, bbox_center, bbox_size, squarify=True, avoid_zero=True)
+        # resize to 224*224
+        img = kornia.geometry.transform.resize(img, (224, 224))
 
         return {"image": img,
                 "K": intr,

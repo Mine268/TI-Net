@@ -102,16 +102,13 @@ class PoseLoss(nn.Module):
     def __init__(self):
         super(PoseLoss, self).__init__()
 
-    def forward(self, pose_out, pose_gt, pose_valid):
+    def forward(self, pose_out, pose_gt, pose_valid=None):
         batch_size = pose_out.shape[0]
 
         pose_out = pose_out.view(batch_size,-1,3)
         pose_gt = pose_gt.view(batch_size,-1,3)
-
-        #pose_out = matrix_to_axis_angle(axis_angle_to_matrix(pose_out))
-        #pose_gt = matrix_to_axis_angle(axis_angle_to_matrix(pose_gt))
-
-        #loss = torch.abs(pose_out - pose_gt) * pose_valid[:,:,None]
+        pose_valid = pose_valid if pose_valid is not None else \
+            torch.ones(size=pose_out.shape[:2], device=pose_out.device)
 
         pose_out = axis_angle_to_matrix(pose_out)
         pose_gt = axis_angle_to_matrix(pose_gt)

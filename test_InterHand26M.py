@@ -32,7 +32,7 @@ def parse_arg():
     return args
 
 joint_regressor = None
-def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -> list:
+def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -> tuple:
     mano_pose_pred = eps.rearrange(pred, '(h b) j d -> h b j d', h=2)
     rmano_pose_pred = mano_pose_pred[0]
     lmano_pose_pred = mano_pose_pred[1]
