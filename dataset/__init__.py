@@ -1,4 +1,5 @@
 from .FreiHand import FreiHand
+from .DexYCB import DexYCB
 
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
