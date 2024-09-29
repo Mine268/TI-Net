@@ -3,6 +3,7 @@ import os
 import json
 import einops as eps
 
+import numpy as np
 import kornia
 import cv2
 import torch
@@ -13,26 +14,29 @@ from utils import crop_img
 
 
 class FreiHand(Dataset):
-    def __init__(self, mode, root="./data/freihand"):
+    def __init__(self, background_removal: bool, mode, root="./data/freihand"):
         assert mode in ["train", "test"]
+        assert isinstance(background_removal, bool)
         self.mode = mode
+        self.background_removal = background_removal
+        self.image_preprocessing = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(size=(224, 224)),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         if mode == "train":
             self.data_root = os.path.join(root, "training")
             self.img_root = os.path.join(self.data_root, "rgb")
             self.intr_file = os.path.join(root, "training_K.json")
             self.kps_file = os.path.join(root, "training_xyz.json")
             self.mano_file = os.path.join(root, "training_mano.json")
+            self.seg_path = os.path.join(root, "training", "mask")
         else:
             self.data_root = os.path.join(root, "evaluation")
             self.img_root = os.path.join(self.data_root, "rgb")
             self.intr_file = os.path.join(root, "evaluation_K.json")
             self.kps_file = os.path.join(root, "evaluation_xyz.json")
             self.mano_file = os.path.join(root, "evaluation_mano.json")
-
-        self.image_preprocessing = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize(size=(224, 224)),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+            self.seg_path = os.path.join(root, "evaluation", "segmap")
 
         with open(self.intr_file, "r") as f:
             self.intrs = json.load(f)
@@ -52,8 +56,17 @@ class FreiHand(Dataset):
         return self.len 
     
     def __getitem__(self, ix: int) -> Tuple:
+        if self.mode == "train":
+            seg_img = cv2.imread(os.path.join(self.seg_path, f"{ix:08d}.jpg"))
+            seg_img = (seg_img > 200).astype(np.uint8)
+        else:  # test
+            seg_img = cv2.imread(os.path.join(self.seg_path, f"{ix:08d}.png"))
+            seg_img = (seg_img != 0).astype(np.uint8)
+        
         img = cv2.imread(os.path.join(self.img_root, f"{ix:08d}.jpg"))
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # bgr -> rgb
+        if self.background_removal:
+            img *= seg_img
         img = self.image_preprocessing(img)
 
         kps3d = self.kps3d[ix]
@@ -102,7 +115,7 @@ class FreiHand(Dataset):
 
 
 if __name__ == "__main__":
-    fh_dataset = FreiHand("train", root="/mnt/data_0/renkaiwen/sl_vit/data/freihand")
+    fh_dataset = FreiHand("test", root="/mnt/data_0/renkaiwen/sl_vit/data/freihand")
     print(len(fh_dataset))
-    item = fh_dataset[4993]
+    item = fh_dataset[1000]
     pass

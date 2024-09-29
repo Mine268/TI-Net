@@ -38,6 +38,11 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch " \
                             "size under memory constraints)')
 
+    # Dataset configure
+    parser.add_argument('--background_removal', action="store_true",
+                        help='Remove background to align the training and evaluation')
+    parser.set_defaults(background_removal=False)
+
     # Model parameters
     parser.add_argument('--model', default='resnet/pose_resnet50', type=str, metavar='MODEL',
                         help='Name of model to finetune')
@@ -119,8 +124,8 @@ def train_one_epoch(model: torch.nn.Module,
     for data_iter_step, data_item in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
-        if data_iter_step % accum_iter == 0:
-            lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+        # if data_iter_step % accum_iter == 0:
+        #     lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         images = data_item['image'].to(device)
         pose_gt = data_item['pose'].to(device)
@@ -202,7 +207,8 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train = FreiHand(mode="train")
+    dataset_train = FreiHand(background_removal=args.background_removal,
+                             mode="train")
     print(dataset_train)
 
     if True:  # ? args.distributed:
@@ -236,7 +242,8 @@ def main(args):
     if model_class == 'vit':
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
     elif model_class == 'resnet':
-        model = resnet.__dict__[model_arch](backbone_ckpt=args.backbone_ckpt)
+        model = resnet.__dict__[model_arch](predict_mano=True,
+                                            backbone_ckpt=args.backbone_ckpt)
     else:
         assert False, "model not supported: %s" % model_str
 
@@ -282,7 +289,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 30 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)

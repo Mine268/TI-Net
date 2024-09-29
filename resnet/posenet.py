@@ -11,6 +11,7 @@ else:
 
 class PoseResNet(nn.Module):
     def __init__(self, block, layers, # num_joints,
+                 predict_mano=True,
                  num_input_channels=3,
                  deconv_with_bias=False,
                  num_deconv_layers=3,
@@ -28,16 +29,20 @@ class PoseResNet(nn.Module):
                                           num_deconv_filters, num_deconv_kernels,
                                           final_conv_kernel)
         self.hidden_dim = self.backbone.hidden_dim
-        self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
-                                      nn.ReLU(inplace=True),
-                                      nn.Linear(1024, 1024),
-                                      nn.ReLU(inplace=True),
-                                      # nn.Linear(1024, 1024),
-                                      # nn.ReLU(inplace=True),
-                                      # nn.Linear(1024, 1024),
-                                      # nn.ReLU(inplace=True),
-                                      nn.Linear(1024, 16*3),
-                                      Rearrange('b (j d) -> b j d', j=16, d=3))
+        if predict_mano:
+            self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(1024, 1024),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(1024, 16*3),
+                                          Rearrange('b (j d) -> b j d', j=16, d=3))
+        else:
+            self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(1024, 1024),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(1024, (21-1)*3),
+                                          Rearrange('b (j d) -> b j d', j=21-1, d=3))
         self.pretrained_backbone = backbone_ckpt is not None
         self.backbone.requires_grad_(self.pretrained_backbone)
 
