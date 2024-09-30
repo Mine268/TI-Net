@@ -4,6 +4,7 @@ __pycache__
 pretrained/
 .preitterrc
 logs/debug/
+*.ipynb
 *.zip
 *.gz
 *.xz
