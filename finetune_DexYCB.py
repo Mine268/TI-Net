@@ -25,7 +25,7 @@ import resnet
 import lr_sched
 from loss import PoseLoss
 
-from dataset import FreiHand
+from dataset import DexYCB
 
 
 def get_args_parser():
@@ -129,12 +129,13 @@ def train_one_epoch(model: torch.nn.Module,
 
         images = data_item['image'].to(device)
         pose_gt = data_item['pose'].to(device)
+        pose_valid = data_item['valid'].to(device)[:,None]
 
         with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
             pose_pred = model(images)
 
         # * calculate the loss
-        loss_mano = pose_loss(pose_pred, pose_gt) 
+        loss_mano = pose_loss(pose_pred, pose_gt, pose_valid) 
         loss = {'backward': loss_mano, 'loss_mano': loss_mano}
 
         loss_value = loss['backward'].item()
@@ -207,8 +208,7 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train = FreiHand(background_removal=args.background_removal,
-                             mode="train")
+    dataset_train = DexYCB("s0", "train")
     print(dataset_train)
 
     if True:  # ? args.distributed:
@@ -289,7 +289,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 100 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 1 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)

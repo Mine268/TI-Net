@@ -12,6 +12,10 @@ import cv2
 import einops as eps
 import numpy as np
 import torch
+import torchvision.transforms as transforms
+import kornia
+
+from utils import crop_img
 
 
 _SUBJECTS = [
@@ -324,14 +328,21 @@ class DexYCB_Base:
 
 class DexYCB(torch.utils.data.Dataset):
     def __init__(self, setup, split):
+        super().__init__()
         self.database = DexYCB_Base(setup, split)
         self.mano_data = {}
         with open("./smplx_models/mano/MANO_RIGHT.pkl", "rb") as f:
             self.mano_data["right"] = pkl.load(f, encoding='latin1')
         with open("./smplx_models/mano/MANO_LEFT.pkl", "rb") as f:
             self.mano_data["left"] = pkl.load(f, encoding='latin1')
-        self.hand_comp = {"right": torch.from_numpy(self.mano_data["right"]["hand_components"].astype(np.float32)),
-                          "left": torch.from_numpy(self.mano_data["left"]["hand_components"].astype(np.float32))}
+        self.hand_comp = \
+            {"right": torch.from_numpy(self.mano_data["right"]["hands_components"].astype(np.float32)),
+             "left": torch.from_numpy(self.mano_data["left"]["hands_components"].astype(np.float32))}
+
+        self.image_preprocessing = \
+            transforms.Compose([transforms.ToTensor(),
+                                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                     std=[0.229, 0.224, 0.225])])
 
     def __len__(self):
         return self.database.__len__()
@@ -344,10 +355,40 @@ class DexYCB(torch.utils.data.Dataset):
         img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
         label = np.load(label_path)  # seg, pose_y, pose_m, joint_3d, joint_2d
 
+        x_min, x_max = float(label['joint_2d'][0,:,0].min()), float(label['joint_2d'][0,:,0].max())
+        y_min, y_max = float(label['joint_2d'][0,:,1].min()), float(label['joint_2d'][0,:,1].max())
+        bbox_center = ((x_min + x_max) / 2, (y_min + y_max) / 2)
+        bbox_size = ((x_max - x_min) * 1.2, (y_max - y_min) * 1.2)
+        img_tensor = self.image_preprocessing(img)
+        img_tensor = crop_img(img_tensor, bbox_center, bbox_size, squarify=True, avoid_zero=True)
+        img_tensor = kornia.geometry.transform.resize(img_tensor, (224, 224))
+
         hand_comp = self.hand_comp[item['mano_side']]
-        pose, _ = eps.unpack(label['pose_m'], [(48,), (3,)], "b *")
+        pose, transl = eps.unpack(label['pose_m'], [(48,), (3,)], "b *")
         pose = torch.from_numpy(pose)
         pose[:,3:] = pose[:,3:] @ hand_comp
-        shape = torch.tensor(item['mano_betas'])[None,:]
+        transl = torch.from_numpy(transl.astype(np.float32))
+        shape = torch.tensor(item['mano_betas'])
 
-        return item
+        do_flip = (item['mano_side'] == "left")  # left flip to right
+        if do_flip:
+            img_tensor = torch.flip(img_tensor, dims=[2])  # horizontal flip
+            pose = eps.rearrange(pose, "b (j d) -> b j d", d=3)
+            pose[:,:,1:3] *= -1
+            pose = eps.rearrange(pose, "b j d -> b (j d)")
+            transl[:,0] *= -1
+
+        valid = torch.tensor(1.) if all((pose == 0).tolist()) else torch.tensor(0.)
+
+        sample = {
+            # "image_path": img_path,
+            "image": img_tensor,
+            "valid": valid,
+            "pose": pose[0],
+            "shape": shape,
+            "transl": transl[0],
+            # "intrinsics": item["intrinsics"],
+            # "do_flip": do_flip
+            }
+        
+        return sample
