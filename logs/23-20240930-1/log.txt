@@ -575,3 +575,5 @@
 {"train_lr": 9.999999999999961e-05, "train_backward": 6.284498150893084, "train_loss_mano": 6.284498150893084, "epoch": 574}
 {"train_lr": 9.999999999999961e-05, "train_backward": 6.281652645801935, "train_loss_mano": 6.281652645801935, "epoch": 575}
 {"train_lr": 9.999999999999961e-05, "train_backward": 6.325523338918611, "train_loss_mano": 6.325523338918611, "epoch": 576}
+{"train_lr": 9.999999999999961e-05, "train_backward": 6.2016911281375435, "train_loss_mano": 6.2016911281375435, "epoch": 607}
+{"train_lr": 9.999999999999961e-05, "train_backward": 6.191492426113819, "train_loss_mano": 6.191492426113819, "epoch": 608}
