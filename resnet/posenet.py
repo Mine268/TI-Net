@@ -29,20 +29,19 @@ class PoseResNet(nn.Module):
                                           num_deconv_filters, num_deconv_kernels,
                                           final_conv_kernel)
         self.hidden_dim = self.backbone.hidden_dim
+        self.predict_mano = predict_mano
         if predict_mano:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, 16*3),
-                                          Rearrange('b (j d) -> b j d', j=16, d=3))
+                                          nn.Linear(1024, 16*3))
         else:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, (21-1)*3),
-                                          Rearrange('b (j d) -> b j d', j=21-1, d=3))
+                                          nn.Linear(1024, (21-1)*3))
         self.pretrained_backbone = backbone_ckpt is not None
         self.backbone.requires_grad_(self.pretrained_backbone)
 
@@ -91,7 +90,7 @@ class PoseResNet(nn.Module):
         return feats
 
     def decode_pose(self, feats):
-        return self.pose_mlp(feats)
+        return einops.rearrange(self.pose_mlp(feats), "b (j d) -> b j d", d=3)
 
     def forward(self, imgs):
         feats = self.extract_feature(imgs)

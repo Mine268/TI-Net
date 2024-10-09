@@ -1,5 +1,12 @@
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import kornia
 import torch
+import numpy as np
+
+from .mano import mano
 
 
 def horizontal_flip_img(imgs: torch.Tensor) -> torch.Tensor:
@@ -97,3 +104,61 @@ def compute_pa_mpjpe_batch(pred_batch: torch.Tensor, gt_batch: torch.Tensor):
     pa_mpjpe = error.mean(dim=-1)  # [B]
 
     return pa_mpjpe
+
+def vis_mano(pose_gt, pose_pred, shape_gt, shape_pred, hand_type: str = 'right'):
+    assert hand_type in ['right', 'left']
+    
+    # 确保 pose_gt 和 pose_pred 的形状匹配
+    batch_size = min(pose_gt.shape[0], 6)
+    
+    # 创建多行多列子图
+    fig, axs = plt.subplots(batch_size, 2, subplot_kw={'projection': '3d'},
+                            figsize=(10, 5 * batch_size))
+    
+    # 如果 batch_size 为 1，则 axs 可能会是 1 维的，需要处理这种情况
+    if batch_size == 1:
+        axs = [axs]
+
+    for i in range(batch_size):
+        # 生成 Mano 模型的 GT 和预测顶点
+        output_gt = mano.layer[hand_type](betas=shape_gt[i:i+1],
+                                          hand_pose=pose_gt[i:i+1, 3:],
+                                          global_orient=pose_gt[i:i+1, :3],
+                                          transl=torch.zeros(1, 3))
+        output_pred = mano.layer[hand_type](betas=shape_pred[i:i+1],
+                                            hand_pose=pose_pred[i:i+1, 3:],
+                                            global_orient=pose_pred[i:i+1, :3],
+                                            transl=torch.zeros(1, 3))
+        
+        faces = mano.face[hand_type]
+        verts_gt = output_gt.vertices[0].numpy()
+        verts_pred = output_pred.vertices[0].numpy()
+
+        # 绘制 Ground Truth 手部模型
+        mesh_gt = Poly3DCollection(verts_gt[faces], color='r', alpha=0.1, edgecolor='k')
+        axs[i][0].add_collection3d(mesh_gt)
+        axs[i][0].set_title(f'Batch {i+1} - Ground Truth')
+        
+        # 设置显示范围
+        scale_gt = verts_gt.flatten()
+        axs[i][0].auto_scale_xyz(scale_gt, scale_gt, scale_gt)
+
+        # 绘制预测的手部模型
+        mesh_pred = Poly3DCollection(verts_pred[faces], color='b', alpha=0.1, edgecolor='k')
+        axs[i][1].add_collection3d(mesh_pred)
+        axs[i][1].set_title(f'Batch {i+1} - Prediction')
+        
+        # 设置显示范围
+        scale_pred = verts_pred.flatten()
+        axs[i][1].auto_scale_xyz(scale_pred, scale_pred, scale_pred)
+
+    # 渲染图像并将其转换为 NumPy 数组
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+
+    # 使用 buffer_rgba 代替 tostring_rgb
+    img = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+    img = img.reshape(fig.canvas.get_width_height()[::-1] + (4,))  # RGBA 通道
+
+    plt.close(fig)  # 关闭图像，释放内存
+    return img
