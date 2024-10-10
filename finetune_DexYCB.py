@@ -90,7 +90,7 @@ def get_args_parser():
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) " \
                             "transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
-    parser.set_defaults(pin_mem=True)
+    parser.set_defaults(pin_mem=False)
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -276,7 +276,9 @@ def main(args):
     model.to(device)
 
     model_without_ddp = model
-    print("Model = %s" % str(model_without_ddp))
+    print("Model arch written to %s" % os.path.join(args.output_dir, "model_arch.txt"))
+    with open(os.path.join(args.output_dir, "model_arch.txt"), "w") as f:
+        f.write(str(model_without_ddp))
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
     
