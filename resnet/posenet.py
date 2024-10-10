@@ -33,9 +33,15 @@ class PoseResNet(nn.Module):
         if predict_mano:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, 1024),
+                                          nn.Linear(1024, 512),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, 16*3))
+                                          nn.Linear(512, 512),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(512, 256),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(256, 256),
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(256, 16*3))
         else:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
