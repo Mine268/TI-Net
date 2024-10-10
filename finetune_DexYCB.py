@@ -125,8 +125,8 @@ def train_one_epoch(model: torch.nn.Module,
     for data_iter_step, data_item in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
-        if data_iter_step % accum_iter == 0:
-            lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+        # if data_iter_step % accum_iter == 0:
+        #     lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         images = data_item['image'].to(device)
         pose_gt = data_item['pose'].to(device)
@@ -143,6 +143,17 @@ def train_one_epoch(model: torch.nn.Module,
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
+            # dump the error checkpoint
+            to_save = {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "epoch": epoch,
+                "scaler": loss_scaler.state_dict(),
+                "args": args,
+                "input": data_item,
+                "loss": loss
+            }
+            torch.save(to_save, os.path.join(args.output_dir, "error_checkpoint.pth"))
             sys.exit(1)
 
         for k in loss.keys():
@@ -258,6 +269,7 @@ def main(args):
     elif model_class == 'resnet':
         model = resnet.__dict__[model_arch](predict_mano=True,
                                             backbone_ckpt=args.backbone_ckpt)
+        print(f"Use pretrained backbone: {args.backbone_ckpt}")
     else:
         assert False, "model not supported: %s" % model_str
 

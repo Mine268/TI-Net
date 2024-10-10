@@ -63,20 +63,6 @@ class PoseResNet(nn.Module):
         else:
             self.backbone.train()
 
-    def train(self, mode: bool = True):
-        if not self.pretrained_backbone:
-            self.backbone.train(mode)
-        self.pose_mlp.train(mode)
-        print(f"trigger TRAIN mode, train backbone: {(not self.pretrained_backbone) and mode}")
-        return self
-
-    def eval(self):
-        if not self.pretrained_backbone:
-            self.backbone.eval()
-        self.pose_mlp.eval()
-        print(f"trigger EVAL mode")
-        return self
-
     def extract_feature(self, x):
         x = self.backbone.conv1(x)
         x = self.backbone.bn1(x)
@@ -93,7 +79,11 @@ class PoseResNet(nn.Module):
         return einops.rearrange(self.pose_mlp(feats), "b (j d) -> b j d", d=3)
 
     def forward(self, imgs):
-        feats = self.extract_feature(imgs)
+        if self.pretrained_backbone:
+            with torch.no_grad():
+                feats = self.extract_feature(imgs)
+        else:
+            feats = self.extract_feature(imgs)
         pose = self.decode_pose(feats)
         return pose
 
