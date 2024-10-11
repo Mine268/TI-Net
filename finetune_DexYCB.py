@@ -149,7 +149,7 @@ def train_one_epoch(model: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             # dump the error checkpoint
             to_save = {
-                "model": ckpt_buffer,
+                "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "epoch": epoch,
                 "scaler": loss_scaler.state_dict(),
