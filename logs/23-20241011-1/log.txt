@@ -1,0 +1,2 @@
+{"train_lr": 0.00010000000000000174, "train_backward": 14.50524748014276, "train_loss_mano": 14.50524748014276, "epoch": 0}
+{"train_lr": 0.00010000000000000174, "train_backward": 13.683308736719313, "train_loss_mano": 13.683308736719313, "epoch": 1}

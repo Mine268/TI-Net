@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 
+import copy
 import random
 import einops
 import torch
@@ -122,6 +123,9 @@ def train_one_epoch(model: torch.nn.Module,
     pose_loss = PoseLoss()
     optimizer.zero_grad()
 
+    # * buffer the ckpt before parameter update, for debugging
+    ckpt_buffer = None
+
     for data_iter_step, data_item in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)):
         # we use a per iteration (instead of per epoch) lr scheduler
@@ -132,8 +136,8 @@ def train_one_epoch(model: torch.nn.Module,
         pose_gt = data_item['pose'].to(device)
         pose_valid = data_item['valid'].to(device)[:,None]
 
-        with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
-            pose_pred = model(images)
+        # with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
+        pose_pred = model(images)
 
         # * calculate the loss
         loss_mano = pose_loss(pose_pred, pose_gt, pose_valid) 
@@ -145,7 +149,7 @@ def train_one_epoch(model: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             # dump the error checkpoint
             to_save = {
-                "model": model.state_dict(),
+                "model": ckpt_buffer,
                 "optimizer": optimizer.state_dict(),
                 "epoch": epoch,
                 "scaler": loss_scaler.state_dict(),
@@ -164,6 +168,7 @@ def train_one_epoch(model: torch.nn.Module,
         # clip gradient
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
         # step
+        # ckpt_buffer = copy.deepcopy(model.state_dict())
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.step()
 
