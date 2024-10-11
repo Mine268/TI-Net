@@ -197,7 +197,7 @@ def train_one_epoch(model: torch.nn.Module,
             log_writer.add_scalar('lr', lr, epoch_1000x)
             # calculate the gradient norm
             log_writer.add_scalar('grad_norm', total_norm, epoch_1000x)
-        if log_writer is not None and (data_iter_step // accum_iter) % 30 == 0:
+        if log_writer is not None and (data_iter_step // accum_iter) % 200 == 0:
             ''' Visulizaing the reconstructing result
             '''
             mano_vis = vis_mano(pose_gt.detach().cpu(),
