@@ -327,8 +327,11 @@ class DexYCB_Base:
 
 
 class DexYCB(torch.utils.data.Dataset):
+    
     def __init__(self, setup, split):
         super().__init__()
+        self.enforce_aug = False
+        self.setup = setup
         self.database = DexYCB_Base(setup, split)
         self.mano_data = {}
         with open("./smplx_models/mano/MANO_RIGHT.pkl", "rb") as f:
@@ -370,6 +373,22 @@ class DexYCB(torch.utils.data.Dataset):
         transl = torch.from_numpy(transl.astype(np.float32))
         shape = torch.tensor(item['mano_betas'])
 
+        rot_deg = torch.tensor([0.])
+        if self.setup == "train" or self.enforce_aug:
+            rot_deg = torch.rand(size=(1,)) * torch.pi * 2
+            rot_mat = torch.Tensor([
+                [torch.cos(-rot_deg), -torch.sin(-rot_deg), 0],
+                [torch.sin(-rot_deg), torch.cos(-rot_deg), 0],
+                [0, 0, 1]
+            ])
+            root_pose = pose[0,:3]
+            root_pose, _ = cv2.Rodrigues(root_pose.numpy())
+            root_pose, _ = cv2.Rodrigues(rot_mat.numpy() @ root_pose)
+            pose[0,:3] = torch.from_numpy(root_pose.reshape(3))
+
+            rot_ang = rot_deg * 180 / torch.pi
+            img_tensor = kornia.geometry.transform.rotate(img_tensor[None,...], rot_ang)[0]
+
         do_flip = (item['mano_side'] == "left")  # left flip to right
         if do_flip:
             img_tensor = torch.flip(img_tensor, dims=[2])  # horizontal flip
@@ -381,14 +400,20 @@ class DexYCB(torch.utils.data.Dataset):
         valid = torch.tensor(1.) if all((pose == 0).tolist()) else torch.tensor(0.)
 
         sample = {
-            # "image_path": img_path,
+            "image_path": img_path,
             "image": img_tensor,
             "valid": valid,
             "pose": pose[0],
             "shape": shape,
             "transl": transl[0],
-            # "intrinsics": item["intrinsics"],
-            # "do_flip": do_flip
+            "intrinsics": item["intrinsics"],
+            "rot_deg": None,
+            "do_flip": do_flip
             }
         
         return sample
+
+if __name__ == "__main__":
+    ds = DexYCB("test", "s0")
+    ds.enforce_aug = True
+    sample = ds[980]
