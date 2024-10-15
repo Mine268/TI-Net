@@ -18,7 +18,8 @@ class PoseResNet(nn.Module):
                  num_deconv_filters=(256, 256, 256),
                  num_deconv_kernels=(4, 4, 4),
                  final_conv_kernel=1,
-                 backbone_ckpt=None
+                 backbone_ckpt=None,
+                 finetune_backbone=True
                  ):
         ''' Pose estimation net using ResNet as backbone.
         backbone_ckpt: dictionary checkpoint or path to pretrained checkpoints.
@@ -33,23 +34,17 @@ class PoseResNet(nn.Module):
         if predict_mano:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, 512),
+                                          nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(512, 512),
-                                          nn.ReLU(inplace=True),
-                                          nn.Linear(512, 256),
-                                          nn.ReLU(inplace=True),
-                                          nn.Linear(256, 256),
-                                          nn.ReLU(inplace=True),
-                                          nn.Linear(256, 16*3))
+                                          nn.Linear(1024, 16*3))
         else:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, (21-1)*3))
-        self.pretrained_backbone = backbone_ckpt is not None
-        self.backbone.requires_grad_(self.pretrained_backbone)
+        self.finetune_backbone = finetune_backbone
+        self.backbone.requires_grad_(self.finetune_backbone)
 
         if isinstance(backbone_ckpt, str):
             backbone_ckpt = torch.load(backbone_ckpt, weights_only=False)
@@ -85,7 +80,7 @@ class PoseResNet(nn.Module):
         return einops.rearrange(self.pose_mlp(feats), "b (j d) -> b j d", d=3)
 
     def forward(self, imgs):
-        if self.pretrained_backbone:
+        if self.finetune_backbone:
             with torch.no_grad():
                 feats = self.extract_feature(imgs)
         else:

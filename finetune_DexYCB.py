@@ -50,6 +50,7 @@ def get_args_parser():
                         help='Name of model to finetune')
     parser.add_argument('--backbone_ckpt', default=None, type=str, help='Path to pre-trained " \
                             "backbone checkpoint')
+    parser.add_argument('--ft_backbone', default=False, type=bool, help="Toggle finetune backbone")
 
     parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
@@ -273,7 +274,8 @@ def main(args):
         model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
     elif model_class == 'resnet':
         model = resnet.__dict__[model_arch](predict_mano=True,
-                                            backbone_ckpt=args.backbone_ckpt)
+                                            backbone_ckpt=args.backbone_ckpt,
+                                            finetune_backbone=args.ft_backbone)
         print(f"Use pretrained backbone: {args.backbone_ckpt}")
     else:
         assert False, "model not supported: %s" % model_str

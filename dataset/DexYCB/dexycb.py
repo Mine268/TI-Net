@@ -407,7 +407,7 @@ class DexYCB(torch.utils.data.Dataset):
             "shape": shape,
             "transl": transl[0],
             "intrinsics": item["intrinsics"],
-            "rot_deg": None,
+            "rot_deg": rot_deg,
             "do_flip": do_flip
             }
         
