@@ -25,7 +25,7 @@ class PoseResNet(nn.Module):
         backbone_ckpt: dictionary checkpoint or path to pretrained checkpoints.
         '''
         super(PoseResNet, self).__init__()
-        self.backbone: nn.Module = ResNet(block, layers, num_input_channels,
+        self.backbone: ResNet = ResNet(block, layers, num_input_channels,
                                           deconv_with_bias, num_deconv_layers,
                                           num_deconv_filters, num_deconv_kernels,
                                           final_conv_kernel)
@@ -60,19 +60,24 @@ class PoseResNet(nn.Module):
             print('missing key(s): ', missing)
             print('unexpected key(s): ', unexpected)
             print(f'Model loaded.')
-            self.backbone.eval()
-        else:
+
+        if finetune_backbone:  # True
             self.backbone.train()
+        else:
+            self.backbone.eval()
+
+    def train(self, mode=True):
+        self.pose_mlp.train(mode)
+        if self.finetune_backbone:
+            self.backbone.train(mode)
+        else:
+            self.backbone.train(False)
+
+    def eval(self):
+        self.train(False)
 
     def extract_feature(self, x):
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        feature_maps = self.backbone.layer4(x)
+        feature_maps = self.backbone.forward_featmap(x)
         feats = torch.mean(einops.rearrange(feature_maps, 'b c h w -> b c (h w)'), dim=-1)
         return feats
 
@@ -81,10 +86,10 @@ class PoseResNet(nn.Module):
 
     def forward(self, imgs):
         if self.finetune_backbone:
+            feats = self.extract_feature(imgs)
+        else:
             with torch.no_grad():
                 feats = self.extract_feature(imgs)
-        else:
-            feats = self.extract_feature(imgs)
         pose = self.decode_pose(feats)
         return pose
 

@@ -167,7 +167,8 @@ def train_one_epoch(model: torch.nn.Module,
         # backward manually
         loss['backward'].backward()
         # clip gradient
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
+        if args.clip_grad is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
         # step
         # ckpt_buffer = copy.deepcopy(model.state_dict())
         if (data_iter_step + 1) % accum_iter == 0:
