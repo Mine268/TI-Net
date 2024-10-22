@@ -17,7 +17,7 @@ from dataset import DexYCB
 from utils import mano
 import resnet
 import vit
-from utils import compute_pa_mpjpe_batch
+from utils import compute_pa_mpjpe_batch, align_w_scale
 
 
 def parse_arg():
@@ -58,9 +58,14 @@ def eval_batch(mano_layer,
 
     mesh_error = ((mesh_gt - mesh_pred) ** 2).sum(-1, keepdim=True).sqrt()
     joint_error = ((joint_gt - joint_pred) ** 2).sum(-1, keepdim=True).sqrt()
-    joint_pa_error = compute_pa_mpjpe_batch(joint_pred, joint_gt)
+    joint_pa_error = []
+    for i in range(joint_pred.shape[0]):
+        joint_pred_pa = align_w_scale(joint_gt[i].detach().cpu().numpy(),
+                                      joint_pred[i].detach().cpu().numpy())
+        joint_pa_error.append(
+            (((joint_pred_pa - joint_gt[i].detach().cpu().numpy()) ** 2).sum(-1) ** 0.5).mean())
 
-    return mesh_error, joint_error, joint_pa_error
+    return mesh_error, joint_error, np.array(joint_pa_error)
 
 
 def test(args):

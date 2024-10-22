@@ -5,6 +5,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import kornia
 import torch
 import numpy as np
+from scipy.linalg import orthogonal_procrustes
 
 from .mano import mano
 
@@ -104,6 +105,36 @@ def compute_pa_mpjpe_batch(pred_batch: torch.Tensor, gt_batch: torch.Tensor):
     pa_mpjpe = error.mean(dim=-1)  # [B]
 
     return pa_mpjpe
+
+def align_w_scale(mtx1, mtx2, return_trafo=False):
+    '''
+    mtx1, mtx2: [J,3]
+    
+    return aligned mtx2 [J,3]
+    '''
+    # center
+    t1 = mtx1.mean(0)
+    t2 = mtx2.mean(0)
+    mtx1_t = mtx1 - t1
+    mtx2_t = mtx2 - t2
+
+    # scale
+    s1 = np.linalg.norm(mtx1_t) + 1e-8
+    mtx1_t /= s1
+    s2 = np.linalg.norm(mtx2_t) + 1e-8
+    mtx2_t /= s2
+
+    # orth alignment
+    R, s = orthogonal_procrustes(mtx1_t, mtx2_t)
+
+    # apply trafos to the second matrix
+    mtx2_t = np.dot(mtx2_t, R.T) * s
+    mtx2_t = mtx2_t * s1 + t1
+
+    if return_trafo:
+        return R, s, s1, t1 - t2
+    else:
+        return mtx2_t
 
 def vis_mano(pose_gt, pose_pred, shape_gt, shape_pred, hand_type: str = 'right'):
     assert hand_type in ['right', 'left']
