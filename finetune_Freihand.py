@@ -130,8 +130,8 @@ def train_one_epoch(model: torch.nn.Module,
         images = data_item['image'].to(device)
         pose_gt = data_item['pose'].to(device)
 
-        with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
-            pose_pred = model(images)
+        # with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
+        pose_pred = model(images)
 
         # * calculate the loss
         loss_mano = pose_loss(pose_pred, pose_gt) 
@@ -145,12 +145,25 @@ def train_one_epoch(model: torch.nn.Module,
 
         for k in loss.keys():
             loss[k] /= accum_iter
-        # NOTE: clip_grad, avoid nan
-        loss_scaler(loss['backward'],
-                    optimizer,
-                    clip_grad=args.clip_grad,
-                    parameters=model.parameters(),
-                    update_grad=(data_iter_step + 1) % accum_iter == 0)
+        
+        # backward manually
+        loss['backward'].backward()
+        # clip gradient
+        if args.clip_grad is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
+        # step
+        # ckpt_buffer = copy.deepcopy(model.state_dict())
+        if (data_iter_step + 1) % accum_iter == 0:
+            optimizer.step()
+
+        # calulate the gradient norm for checking
+        total_norm = 0.
+        for param in model.parameters():
+            if param.grad is not None:
+                param_norm = param.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** 0.5
+
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.zero_grad()
 
@@ -250,7 +263,9 @@ def main(args):
     model.to(device)
 
     model_without_ddp = model
-    print("Model = %s" % str(model_without_ddp))
+    print("Model arch written to %s" % os.path.join(args.output_dir, "model_arch.txt"))
+    with open(os.path.join(args.output_dir, "model_arch.txt"), "w") as f:
+        f.write(str(model_without_ddp))
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
     
@@ -270,7 +285,7 @@ def main(args):
     
     # following timm: set wd as 0 for bias and norm layers
     param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
-    optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
+    optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.999))
     print(optimizer)
     loss_scaler = NativeScaler()
 
