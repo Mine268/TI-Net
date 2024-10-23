@@ -130,8 +130,8 @@ def train_one_epoch(model: torch.nn.Module,
         images = data_item['image'].to(device)
         pose_gt = data_item['pose'].to(device)
 
-        with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
-            pose_pred = model(images)
+        # with torch.amp.autocast("cuda"):  # torch.cuda.amp.autocast():
+        pose_pred = model(images)
 
         # * calculate the loss
         loss_mano = pose_loss(pose_pred, pose_gt) 
