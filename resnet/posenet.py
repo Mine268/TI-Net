@@ -18,33 +18,33 @@ class PoseResNet(nn.Module):
                  num_deconv_filters=(256, 256, 256),
                  num_deconv_kernels=(4, 4, 4),
                  final_conv_kernel=1,
-                 backbone_ckpt=None
+                 backbone_ckpt=None,
+                 finetune_backbone=True
                  ):
         ''' Pose estimation net using ResNet as backbone.
         backbone_ckpt: dictionary checkpoint or path to pretrained checkpoints.
         '''
         super(PoseResNet, self).__init__()
-        self.backbone: nn.Module = ResNet(block, layers, num_input_channels,
+        self.backbone: ResNet = ResNet(block, layers, num_input_channels,
                                           deconv_with_bias, num_deconv_layers,
                                           num_deconv_filters, num_deconv_kernels,
                                           final_conv_kernel)
         self.hidden_dim = self.backbone.hidden_dim
+        self.predict_mano = predict_mano
         if predict_mano:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, 16*3),
-                                          Rearrange('b (j d) -> b j d', j=16, d=3))
+                                          nn.Linear(1024, 16*3))
         else:
             self.pose_mlp = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                           nn.ReLU(inplace=True),
                                           nn.Linear(1024, 1024),
                                           nn.ReLU(inplace=True),
-                                          nn.Linear(1024, (21-1)*3),
-                                          Rearrange('b (j d) -> b j d', j=21-1, d=3))
-        self.pretrained_backbone = backbone_ckpt is not None
-        self.backbone.requires_grad_(self.pretrained_backbone)
+                                          nn.Linear(1024, (21-1)*3))
+        self.finetune_backbone = finetune_backbone
+        self.backbone.requires_grad_(self.finetune_backbone)
 
         if isinstance(backbone_ckpt, str):
             backbone_ckpt = torch.load(backbone_ckpt, weights_only=False)
@@ -60,41 +60,36 @@ class PoseResNet(nn.Module):
             print('missing key(s): ', missing)
             print('unexpected key(s): ', unexpected)
             print(f'Model loaded.')
-            self.backbone.eval()
-        else:
-            self.backbone.train()
 
-    def train(self, mode: bool = True):
-        if not self.pretrained_backbone:
-            self.backbone.train(mode)
+        if finetune_backbone:  # True
+            self.backbone.train()
+        else:
+            self.backbone.eval()
+
+    def train(self, mode=True):
         self.pose_mlp.train(mode)
-        print(f"trigger TRAIN mode, train backbone: {(not self.pretrained_backbone) and mode}")
-        return self
+        if self.finetune_backbone:
+            self.backbone.train(mode)
+        else:
+            self.backbone.train(False)
 
     def eval(self):
-        if not self.pretrained_backbone:
-            self.backbone.eval()
-        self.pose_mlp.eval()
-        print(f"trigger EVAL mode")
-        return self
+        self.train(False)
 
     def extract_feature(self, x):
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        feature_maps = self.backbone.layer4(x)
+        feature_maps = self.backbone.forward_featmap(x)
         feats = torch.mean(einops.rearrange(feature_maps, 'b c h w -> b c (h w)'), dim=-1)
         return feats
 
     def decode_pose(self, feats):
-        return self.pose_mlp(feats)
+        return einops.rearrange(self.pose_mlp(feats), "b (j d) -> b j d", d=3)
 
     def forward(self, imgs):
-        feats = self.extract_feature(imgs)
+        if self.finetune_backbone:
+            feats = self.extract_feature(imgs)
+        else:
+            with torch.no_grad():
+                feats = self.extract_feature(imgs)
         pose = self.decode_pose(feats)
         return pose
 

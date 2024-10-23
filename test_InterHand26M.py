@@ -13,7 +13,8 @@ import einops as eps
 from tqdm import tqdm
 
 from dataset.InterHand26M import InterHand26M
-from dataset.InterHand26M.utils.mano import mano
+# from dataset.InterHand26M.utils.mano import mano
+from utils import mano
 import resnet
 import vit
 

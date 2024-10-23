@@ -18,7 +18,8 @@ import random
 from glob import glob
 from pycocotools.coco import COCO
 from .config import cfg
-from .utils.mano import mano
+# from .utils.mano import mano
+from utils import mano
 from .utils.preprocessing import load_img, get_bbox, crop_img, sanitize_bbox, process_bbox, augmentation, transform_db_data, transform_mano_data, get_mano_data, get_iou
 from .utils.transforms import world2cam, cam2pixel, transform_joint_to_other_db
 # from .utils.vis import vis_keypoints, save_obj, vis_3d_skeleton

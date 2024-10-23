@@ -12,12 +12,12 @@ import numpy as np
 import einops as eps
 from tqdm import tqdm
 
-from dataset import FreiHand 
+from dataset import DexYCB
 # from dataset.InterHand26M.utils.mano import mano
 from utils import mano
 import resnet
 import vit
-from utils import compute_pa_mpjpe_batch
+from utils import compute_pa_mpjpe_batch, align_w_scale
 
 
 def parse_arg():
@@ -58,9 +58,14 @@ def eval_batch(mano_layer,
 
     mesh_error = ((mesh_gt - mesh_pred) ** 2).sum(-1, keepdim=True).sqrt()
     joint_error = ((joint_gt - joint_pred) ** 2).sum(-1, keepdim=True).sqrt()
-    joint_pa_error = compute_pa_mpjpe_batch(joint_pred, joint_gt)
+    joint_pa_error = []
+    for i in range(joint_pred.shape[0]):
+        joint_pred_pa = align_w_scale(joint_gt[i].detach().cpu().numpy(),
+                                      joint_pred[i].detach().cpu().numpy())
+        joint_pa_error.append(
+            (((joint_pred_pa - joint_gt[i].detach().cpu().numpy()) ** 2).sum(-1) ** 0.5).mean())
 
-    return mesh_error, joint_error, joint_pa_error
+    return mesh_error, joint_error, np.array(joint_pa_error)
 
 
 def test(args):
@@ -68,7 +73,7 @@ def test(args):
     mano_layer['left'].to(f"cuda:{args.device}")
     mano_layer['right'].to(f"cuda:{args.device}")
 
-    dataset_train = FreiHand(mode="test") 
+    dataset_train = DexYCB("s0", "test")
     dataloader = torch.utils.data.DataLoader(dataset_train,
                                              batch_size=args.batch_size,
                                              pin_memory=True,
@@ -110,7 +115,7 @@ def test(args):
     print(f"PA-MPJPE: {pampjpe} m")
 
     time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    with open(os.path.join(args.output_dir, f"eval_Freihand_{time_str}.txt"), "w") as f:
+    with open(os.path.join(args.output_dir, f"eval_DexYCB_{time_str}.txt"), "w") as f:
         f.write(f"MPJPE: {mpjpe} m\nPAMPJPE: {pampjpe}")
 
 
