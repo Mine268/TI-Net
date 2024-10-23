@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from dataset.InterHand26M import InterHand26M
 # from dataset.InterHand26M.utils.mano import mano
-from utils import mano
+from utils import mano, align_w_scale
 import resnet
 import vit
 
@@ -84,7 +84,18 @@ def eval_batch(mano_layer, pred: torch.Tensor, targets: dict, meta_info: dict) -
     mesh_valid = meta_info['mano_mesh_valid']
     joint_valid = meta_info['joint_valid']
 
-    return mesh_error, mesh_valid, joint_error, joint_valid
+    joint_pred_pa = []
+    for i in range(joint_gt.shape[0]):
+        rjoint_pred_pa = align_w_scale(joint_gt[i, :21].detach().cpu().numpy(),
+                                       joint_pred[i, :21].detach().cpu().numpy())
+        ljoint_pred_pa = align_w_scale(joint_gt[i, 21:].detach().cpu().numpy(),
+                                       joint_pred[i, 21:].detach().cpu().numpy())
+        joint_pred_pa.append(np.concatenate([rjoint_pred_pa, ljoint_pred_pa], axis=0).tolist())
+
+    joint_pred_pa = torch.tensor(joint_pred_pa).to(joint_error.device)
+    joint_error_pa = ((joint_pred_pa - joint_gt) ** 2).sum(-1, keepdim=True).sqrt()
+
+    return mesh_error, mesh_valid, joint_error, joint_error_pa, joint_valid
 
 
 def test(args):
@@ -113,6 +124,7 @@ def test(args):
     model.eval()
 
     mpjpe_list = []
+    pa_mpjpe_list = []
     mpvpe_sum, vertix_num = 0.0, 0
 
     for ix, (inputs_, targets_, meta_info_) in tqdm(enumerate(dataloader), total=len(dataloader), ncols=100):
@@ -130,17 +142,21 @@ def test(args):
 
         with torch.no_grad():
             pred = model(samples)
-            mesh_error, mesh_valid, joint_error, joint_valid = eval_batch(mano_layer, pred, targets_, meta_info_)
+            mesh_error, mesh_valid, joint_error, joint_error_pa, joint_valid = \
+                eval_batch(mano_layer, pred, targets_, meta_info_)
 
         mpjpe_list.extend(joint_error[joint_valid > 0.5].tolist())
+        pa_mpjpe_list.extend(joint_error_pa[joint_valid > 0.5].tolist())
         cur_mpvpe = mesh_error[mesh_valid > 0.5]
         mpvpe_sum += cur_mpvpe.sum().item()
         vertix_num += cur_mpvpe.shape[0]
 
     mpjpe = np.mean(mpjpe_list)
+    pa_mpjpe = np.mean(pa_mpjpe_list)
     mpvpe = mpvpe_sum / vertix_num
 
     print(f"MPJPE: {mpjpe} m")
+    print(f"PA-MPJPE: {pa_mpjpe} m")
     print(f"MPVPE: {mpvpe} m")
 
     time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
