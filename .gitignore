@@ -2,7 +2,7 @@ __pycache__
 .vscode
 .ipynb_checkpoints
 .virtual_documents
-.h5
+*.h5
 pretrained/
 .preitterrc
 logs/debug/
