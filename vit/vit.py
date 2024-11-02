@@ -18,7 +18,7 @@ import timm
 from timm.models.vision_transformer import Block, PatchEmbed
 import einops
 
-from pos_embed import *
+from .pos_embed import *
 
 
 class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
