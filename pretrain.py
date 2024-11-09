@@ -47,7 +47,9 @@ def get_args_parser():
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
-    parser.add_argument('--train_binary_operation', default=False, type=bool,
+    # parser.add_argument('--train_binary_operation', default=False, type=bool,
+    #                     help='Introducing combination into loss')
+    parser.add_argument('--train_secondary_trans', default=False, type=bool,
                         help='Introducing combination into loss')
 
     # Optimizer parameters
@@ -92,7 +94,7 @@ def get_args_parser():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--local_rank', default=-1, type=int)
+    parser.add_argument('--local-rank', default=-1, type=int)
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
@@ -238,16 +240,19 @@ def main(args):
     model_str = args.model
     model_class, model_arch = model_str.split('/')
     if model_class == 'vit':
-        model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss)
+        model = vit.__dict__[model_arch](norm_pix_loss=args.norm_pix_loss,
+            train_secondary_trans=args.train_secondary_trans)
     elif model_class == 'resnet':
-        model = resnet.__dict__[model_arch](train_binary_operation=args.train_binary_operation)
+        model = resnet.__dict__[model_arch](train_binary_operation=args.train_secondary_trans)
     else:
         assert False, "model not supported: %s" % model_str
 
     model.to(device)
 
     model_without_ddp = model
-    print("Model = %s" % str(model_without_ddp))
+    print("Model arch written to %s" % os.path.join(args.output_dir, "model_arch.txt"))
+    with open(os.path.join(args.output_dir, "model_arch.txt"), "w") as f:
+        f.write(str(model_without_ddp))
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
     

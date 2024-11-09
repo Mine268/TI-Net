@@ -3,6 +3,7 @@ from functools import partial
 import torch.nn as nn
 from .vit import VisionTransformer, VitAutoEncoder, SL_VitAutoEncoder, SLL_VitAutoEncoder
 from .ti_vit import TI_ViT
+from .posevit import PoseViT
 
 
 # -----------------

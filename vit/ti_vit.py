@@ -20,6 +20,9 @@ from .pos_embed import get_2d_sincos_pos_embed
 import utils
 
 
+ROT_EMBED_DIM = 32
+LOW_RANK = 128
+
 class TI_ViT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
     """
@@ -34,15 +37,15 @@ class TI_ViT(nn.Module):
 
         # --------------------------------------------------------------------------
         # Isomorphic Transformations
-        self.rot_embed = nn.Sequential(nn.Linear(2, 32, bias=True), nn.ReLU(),
-                                       nn.Linear(32, 32, bias=True), nn.ReLU(),
-                                       nn.Linear(32, 32, bias=False))
-        self.horizontal_flip = nn.Sequential(nn.Linear(embed_dim, 128, bias=False),
-                                             nn.Linear(128, embed_dim, bias=False))
-        self.rotation = nn.Sequential(nn.Linear(embed_dim + 32, 128, bias=False),
-                                      nn.Linear(128, embed_dim, bias=False))
-        self.horizontal_rot = nn.Sequential(nn.Linear(embed_dim + 32, 128, bias=False),
-                                            nn.Linear(128, embed_dim, bias=False))
+        self.rot_embed = nn.Sequential(nn.Linear(2, ROT_EMBED_DIM, bias=True), nn.ReLU(),
+                                       nn.Linear(ROT_EMBED_DIM, ROT_EMBED_DIM, bias=True), nn.ReLU(),
+                                       nn.Linear(ROT_EMBED_DIM, ROT_EMBED_DIM, bias=False))
+        self.horizontal_flip = nn.Sequential(nn.Linear(embed_dim, LOW_RANK, bias=False),
+                                             nn.Linear(LOW_RANK, embed_dim, bias=False))
+        self.rotation = nn.Sequential(nn.Linear(embed_dim + ROT_EMBED_DIM, LOW_RANK, bias=False),
+                                      nn.Linear(LOW_RANK, embed_dim, bias=False))
+        self.horizontal_rot = nn.Sequential(nn.Linear(embed_dim + ROT_EMBED_DIM, LOW_RANK, bias=False),
+                                            nn.Linear(LOW_RANK, embed_dim, bias=False))
         # --------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------
